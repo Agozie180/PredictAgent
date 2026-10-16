@@ -30,3 +30,7 @@ broadcast/
 # Arc Studio runtime logs (not source)
 console.jsonl
 traces.jsonl
+
+# Agent working files (internal planning — not submission artifacts per L13)
+AGENTS.md
+CLAUDE.md
