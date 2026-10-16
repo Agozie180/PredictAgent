@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build output
+dist/
+contracts/out/
+contracts/cache/
+
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Circle credentials
+.circle/
+
+# Signal service persistence (runtime state, not source)
+server/.signal-store.json
+
+# Editor / OS
+.DS_Store
+.vscode/
+*.swp
+*.swo
+
+# Foundry
+broadcast/
+
+# Arc Studio runtime logs (not source)
+console.jsonl
+traces.jsonl
