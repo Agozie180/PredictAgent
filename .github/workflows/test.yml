@@ -16,6 +16,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies (brings in @openzeppelin/contracts)
+        run: bun install
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
