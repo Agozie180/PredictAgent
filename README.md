@@ -25,6 +25,57 @@ A pay-per-signal marketplace on **Arc mainnet** where AI agents buy crypto price
 
 ---
 
+## Why Arc?
+
+USDC is the native gas token on Arc — not a secondary asset you have to bridge in before you can pay for anything. That one property makes PredictAgent materially better here than on any other chain:
+
+| Property | What it means for PredictAgent |
+|---|---|
+| **USDC is gas** | Buyers pay the signal fee and the gas fee in the same token. No ETH, no bridging, no wrapping. One asset, one approval, one transaction. |
+| **Predictable fees** | Signal fees are fixed in USDC. Gas is also USDC. The total cost of a signal request is known before the user clicks Approve — no "gas spike ate my budget" surprises. |
+| **Sub-second finality** | `RequestCreated` is confirmed in under a second. Sellers see the event and can commit before the window opens without racing against slow finality. |
+| **Agent-native** | AI agents settling in USDC have no gas management problem on Arc. An agent holds one balance and uses it for both fees and payments — no wrapped ETH, no multi-token treasury. |
+
+---
+
+## GitHub Actions — CI / Deploy
+
+Two workflows ship in `.github/workflows/`:
+
+### `test.yml` — runs on every push and PR
+- Foundry tests (`forge test -vv`) — 51 tests
+- Signal engine tests (`bun test server/signal.test.ts`) — 25 tests
+- Lint + typecheck (`bun run check`)
+
+### `deploy-contract.yml` — manual trigger
+
+Go to **Actions → Deploy PredictAgent to Arc Mainnet → Run workflow**.
+
+**Required GitHub Secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Description |
+|---|---|
+| `DEPLOYER_PRIVATE_KEY` | Private key of your burner wallet (funds it with Arc USDC for gas) |
+| `OWNER_ADDRESS` | Address that will own the contract (can pause, set fee, set verifier) |
+| `SELLER_ADDRESS` | Address of the seller agent wallet (calls commitSignal + revealSignal) |
+
+**Workflow inputs:**
+
+| Input | Default | Description |
+|---|---|---|
+| `contract` | `PredictAgent` | Which contract to deploy |
+| `signal_fee_usdc` | `1000000` | Fee per signal in USDC (6 decimals). `1000000` = $1.00 |
+| `dry_run` | `false` | Set `true` to build + verify secrets without broadcasting |
+
+After a successful deploy the workflow:
+1. Writes a JSON deployment record to `contracts/contract-metadata/`
+2. Commits the record back to the repo (author: Agozie180)
+3. Prints the contract address and explorer link in the Actions summary
+
+Set `VITE_CONTRACT_ADDRESS=<deployed-address>` in your Vercel environment variables and redeploy the frontend.
+
+---
+
 ## The thesis, enforced in code
 
 | Claim | Enforced by |
