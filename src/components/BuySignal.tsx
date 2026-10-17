@@ -129,7 +129,7 @@ export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onVie
       address: PREDICT_AGENT_ADDRESS,
       abi: PREDICT_AGENT_ABI,
       functionName: 'requestSignal',
-      args: [token, windowOpen, windowClose],
+      args: [token, windowOpen, windowClose, 0n], // 0n = use global default revealDeadlineOffset
       chainId: ARC_CHAIN_ID,
     })
   }

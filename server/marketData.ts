@@ -10,28 +10,81 @@
 
 import type { Candle } from './signal'
 
-const BINANCE_BASE = 'https://api.binance.com/api/v3'
+const BINANCE_BASE   = 'https://api.binance.com/api/v3'
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3'
+const KRAKEN_BASE    = 'https://api.kraken.com/0/public'
 
 // Map token symbol → Binance pair
 const BINANCE_PAIRS: Record<string, string> = {
-  BTC: 'BTCUSDT',
-  ETH: 'ETHUSDT',
-  SOL: 'SOLUSDT',
-  ARB: 'ARBUSDT',
+  BTC:  'BTCUSDT',
+  ETH:  'ETHUSDT',
+  SOL:  'SOLUSDT',
+  ARB:  'ARBUSDT',
   MATIC: 'MATICUSDT',
 }
 
-// Map token symbol → CoinGecko id (fallback)
+// Map token symbol → Kraken pair (fallback tier 2)
+const KRAKEN_PAIRS: Record<string, string> = {
+  BTC:  'XBTUSD',
+  ETH:  'ETHUSD',
+  SOL:  'SOLUSD',
+  ARB:  'ARBUSD',
+  MATIC: 'MATICUSD',
+}
+
+// Map token symbol → CoinGecko id (fallback tier 3)
 const COINGECKO_IDS: Record<string, string> = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
-  ARB: 'arbitrum',
+  BTC:  'bitcoin',
+  ETH:  'ethereum',
+  SOL:  'solana',
+  ARB:  'arbitrum',
   MATIC: 'matic-network',
 }
 
 export const SUPPORTED_TOKENS = Object.keys(BINANCE_PAIRS)
+
+// ── Circuit breaker ───────────────────────────────────────────────────────────
+//
+// Tracks how many consecutive failures each source has had.
+// After CIRCUIT_OPEN_THRESHOLD failures, the source is "open" (skipped) for
+// CIRCUIT_RESET_MS milliseconds before we try again.
+
+interface CircuitState { failures: number; openUntil: number }
+const CIRCUIT_OPEN_THRESHOLD = 3
+const CIRCUIT_RESET_MS = 5 * 60 * 1000  // 5 min
+
+const circuits: Record<string, CircuitState> = {
+  binance:   { failures: 0, openUntil: 0 },
+  kraken:    { failures: 0, openUntil: 0 },
+  coingecko: { failures: 0, openUntil: 0 },
+}
+
+function isCircuitOpen(source: string): boolean {
+  const c = circuits[source]
+  if (!c) return false
+  return c.failures >= CIRCUIT_OPEN_THRESHOLD && Date.now() < c.openUntil
+}
+
+function recordSuccess(source: string) {
+  const c = circuits[source]
+  if (c) { c.failures = 0; c.openUntil = 0 }
+}
+
+function recordFailure(source: string) {
+  const c = circuits[source]
+  if (!c) return
+  c.failures++
+  if (c.failures >= CIRCUIT_OPEN_THRESHOLD) {
+    c.openUntil = Date.now() + CIRCUIT_RESET_MS
+    console.warn(`[marketData] Circuit OPEN for ${source} until ${new Date(c.openUntil).toISOString()}`)
+  }
+}
+
+// ── Staleness tracking ────────────────────────────────────────────────────────
+// Each SpotPrice already has a fetchedAt field. Consumers should check
+// (Date.now() - fetchedAt) against MAX_PRICE_AGE_MS and warn if stale.
+
+export const MAX_PRICE_AGE_MS = 90_000  // 90s
 
 export interface SpotPrice {
   token: string
@@ -47,12 +100,39 @@ export interface SpotPrice {
 
 export async function fetchCandles(token: string, limit = 60): Promise<Candle[]> {
   const t = token.toUpperCase()
-  try {
-    return await fetchCandlesBinance(t, limit)
-  } catch (err) {
-    console.warn(`[marketData] Binance candle fetch failed for ${t}, trying CoinGecko fallback:`, err)
-    return fetchCandlesCoinGecko(t, limit)
+
+  // Tier 1: Binance
+  if (!isCircuitOpen('binance')) {
+    try {
+      const result = await fetchCandlesBinance(t, limit)
+      recordSuccess('binance')
+      return result
+    } catch (err) {
+      console.warn(`[marketData] Binance candle fetch failed for ${t}:`, err)
+      recordFailure('binance')
+    }
+  } else {
+    console.warn(`[marketData] Binance circuit open — skipping for ${t}`)
   }
+
+  // Tier 2: Kraken
+  if (!isCircuitOpen('kraken')) {
+    try {
+      const result = await fetchCandlesKraken(t, limit)
+      recordSuccess('kraken')
+      return result
+    } catch (err) {
+      console.warn(`[marketData] Kraken candle fetch failed for ${t}:`, err)
+      recordFailure('kraken')
+    }
+  } else {
+    console.warn(`[marketData] Kraken circuit open — skipping for ${t}`)
+  }
+
+  // Tier 3: CoinGecko
+  console.warn(`[marketData] Falling back to CoinGecko for ${t}`)
+  const result = await fetchCandlesCoinGecko(t, limit)
+  return result
 }
 
 async function fetchCandlesBinance(token: string, limit: number): Promise<Candle[]> {
@@ -72,6 +152,38 @@ async function fetchCandlesBinance(token: string, limit: number): Promise<Candle
     low:    parseFloat(k[3]),
     close:  parseFloat(k[4]),
     volume: parseFloat(k[5]),
+  }))
+}
+
+async function fetchCandlesKraken(token: string, limit: number): Promise<Candle[]> {
+  const pair = KRAKEN_PAIRS[token]
+  if (!pair) throw new Error(`No Kraken pair for ${token}`)
+
+  // Kraken OHLC: interval=60 (minutes), returns up to 720 candles
+  const url = `${KRAKEN_BASE}/OHLC?pair=${pair}&interval=60`
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
+  if (!res.ok) throw new Error(`Kraken OHLC ${res.status}: ${res.statusText}`)
+
+  interface KrakenOhlcResponse {
+    error: string[]
+    result: Record<string, Array<[number, string, string, string, string, string, string, number]>>
+  }
+  const data = (await res.json()) as KrakenOhlcResponse
+  if (data.error && data.error.length > 0) throw new Error(`Kraken error: ${data.error.join(', ')}`)
+
+  // Result key is the pair name (may differ from input, e.g. "XXBTZUSD")
+  const resultKey = Object.keys(data.result).find(k => k !== 'last')
+  if (!resultKey) throw new Error(`Kraken: no candle data for ${pair}`)
+
+  // [time, open, high, low, close, vwap, volume, count]
+  const raw = data.result[resultKey]
+  return raw.slice(-limit).map(k => ({
+    timestamp: k[0],
+    open:   parseFloat(k[1]),
+    high:   parseFloat(k[2]),
+    low:    parseFloat(k[3]),
+    close:  parseFloat(k[4]),
+    volume: parseFloat(k[6]),
   }))
 }
 
@@ -100,12 +212,33 @@ async function fetchCandlesCoinGecko(token: string, limit: number): Promise<Cand
 // ── Spot price ────────────────────────────────────────────────────────────────
 
 export async function fetchSpotPrices(tokens: string[]): Promise<SpotPrice[]> {
-  try {
-    return await fetchSpotBinance(tokens)
-  } catch (err) {
-    console.warn('[marketData] Binance spot fetch failed, using CoinGecko fallback:', err)
-    return fetchSpotCoinGecko(tokens)
+  // Tier 1: Binance
+  if (!isCircuitOpen('binance')) {
+    try {
+      const result = await fetchSpotBinance(tokens)
+      recordSuccess('binance')
+      return result
+    } catch (err) {
+      console.warn('[marketData] Binance spot fetch failed:', err)
+      recordFailure('binance')
+    }
   }
+
+  // Tier 2: Kraken
+  if (!isCircuitOpen('kraken')) {
+    try {
+      const result = await fetchSpotKraken(tokens)
+      recordSuccess('kraken')
+      return result
+    } catch (err) {
+      console.warn('[marketData] Kraken spot fetch failed:', err)
+      recordFailure('kraken')
+    }
+  }
+
+  // Tier 3: CoinGecko
+  console.warn('[marketData] Falling back to CoinGecko for spot prices')
+  return fetchSpotCoinGecko(tokens)
 }
 
 async function fetchSpotBinance(tokens: string[]): Promise<SpotPrice[]> {
@@ -136,6 +269,52 @@ async function fetchSpotBinance(tokens: string[]): Promise<SpotPrice[]> {
       high24h: parseFloat(d.highPrice),
       low24h: parseFloat(d.lowPrice),
       volume24h: parseFloat(d.quoteVolume),
+      fetchedAt: Date.now(),
+    })
+  }
+  return out
+}
+
+async function fetchSpotKraken(tokens: string[]): Promise<SpotPrice[]> {
+  const pairs = tokens
+    .map(t => KRAKEN_PAIRS[t.toUpperCase()])
+    .filter(Boolean)
+  if (pairs.length === 0) return []
+
+  const url = `${KRAKEN_BASE}/Ticker?pair=${pairs.join(',')}`
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
+  if (!res.ok) throw new Error(`Kraken Ticker ${res.status}`)
+
+  interface KrakenTickerData {
+    c: [string, string]   // [last trade price, lot volume]
+    h: [string, string]   // [today's high, last 24h high]
+    l: [string, string]   // [today's low, last 24h low]
+    v: [string, string]   // [today's volume, last 24h volume]
+    p: [string, string]   // [VWAP today, VWAP 24h]
+    o: string             // today's opening price
+  }
+  interface KrakenTickerResponse {
+    error: string[]
+    result: Record<string, KrakenTickerData>
+  }
+  const data = (await res.json()) as KrakenTickerResponse
+  if (data.error?.length) throw new Error(`Kraken Ticker error: ${data.error.join(', ')}`)
+
+  const out: SpotPrice[] = []
+  for (const [krakenKey, tick] of Object.entries(data.result)) {
+    // Find our token for this Kraken key (Kraken may normalise key)
+    const token = Object.entries(KRAKEN_PAIRS).find(([, v]) => krakenKey.includes(v.slice(0, 3)))?.[0]
+    if (!token) continue
+    const price = parseFloat(tick.c[0])
+    const open  = parseFloat(tick.o)
+    const change24hPct = open > 0 ? ((price - open) / open) * 100 : 0
+    out.push({
+      token,
+      price,
+      change24hPct,
+      high24h:   parseFloat(tick.h[1]),
+      low24h:    parseFloat(tick.l[1]),
+      volume24h: parseFloat(tick.v[1]) * price,
       fetchedAt: Date.now(),
     })
   }

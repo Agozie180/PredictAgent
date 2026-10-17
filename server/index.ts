@@ -18,7 +18,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fetchCandles, fetchSpotPrices, SUPPORTED_TOKENS, type SpotPrice } from './marketData'
-import { computeSignal, computeCommitHash, stringToBytes32, type SignalOutput } from './signal'
+import { computeSignal, computeCommitHash, stringToBytes32, backtestSignal, type SignalOutput } from './signal'
 
 const PORT = 3001
 const STORE_PATH = join(import.meta.dir, '.signal-store.json')
@@ -226,6 +226,25 @@ Bun.serve({
       const cached = liveSignals.get(token)
       if (!cached) return json({ error: 'Signal data not in memory. Service may have just restarted.' }, 503)
       return json(buildSignalResponse(cached.output, BigInt(requestId)))
+    }
+
+    // GET /signal/backtest?token=BTC&limit=200
+    if (path === '/signal/backtest' && req.method === 'GET') {
+      const token = (url.searchParams.get('token') ?? '').toUpperCase()
+      const limit = Math.min(500, Math.max(60, parseInt(url.searchParams.get('limit') ?? '200', 10)))
+      if (!token) return json({ error: 'Missing ?token=' }, 400)
+      if (!SUPPORTED_TOKENS.includes(token)) return json({ error: `Unsupported token: ${token}` }, 400)
+      try {
+        const candles = await fetchCandles(token, limit)
+        const result = backtestSignal(token, candles)
+        return json({
+          ...result,
+          candles: candles.length,
+          warning: 'DEMO v1 retrospective backtest only — in-sample, look-ahead bias applies. Do NOT use for investment decisions.',
+        })
+      } catch (e) {
+        return json({ error: String(e) }, 503)
+      }
     }
 
     // POST /signal/commit — seller agent calls this to lock signal to a requestId

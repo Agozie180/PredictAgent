@@ -200,6 +200,71 @@ export function computeSignal(token: string, candles: Candle[]): SignalOutput {
   }
 }
 
+// ── Backtest (DEMO v1 retrospective) ─────────────────────────────────────────
+//
+// Runs computeSignal() over a sliding window of historical candles and checks
+// whether the target price was hit within the confidence band before the
+// next signal is computed.
+//
+// IMPORTANT: This is a retrospective in-sample backtest using the same candles
+// the signal was computed from. It suffers from look-ahead bias and overfitting.
+// It measures internal consistency of the rules, NOT future profitability.
+// DO NOT use these numbers to make investment decisions.
+
+export interface BacktestResult {
+  token: string
+  windowCount: number
+  wins: number
+  losses: number
+  winRate: number        // 0–1
+  avgStrength: number    // mean signal strength score at entry
+  /** Stated as data only — not a profitability guarantee */
+  disclaimer: string
+}
+
+export function backtestSignal(token: string, candles: Candle[], windowSize = 60, step = 6): BacktestResult {
+  const MIN = 55  // matches computeSignal MIN_CANDLES
+  if (candles.length < windowSize) throw new Error(`Need at least ${windowSize} candles`)
+
+  let wins = 0
+  let losses = 0
+  let strengthSum = 0
+  let count = 0
+
+  // Slide window across candles, leaving enough tail to check outcome
+  for (let i = MIN; i + step < candles.length; i += step) {
+    const slice = candles.slice(Math.max(0, i - windowSize), i)
+    if (slice.length < MIN) continue
+
+    let signal: SignalOutput
+    try { signal = computeSignal(token, slice) } catch { continue }
+
+    // "Outcome": did the price hit the target within the next `step` candles?
+    const target = Number(signal.targetPrice) / 1_000_000
+    const band = Number(signal.confidenceBandBps) / 10_000
+    const lower = target * (1 - band)
+    const upper = target * (1 + band)
+
+    const future = candles.slice(i, Math.min(i + step, candles.length))
+    const hit = future.some(c => c.high >= lower && c.low <= upper)
+
+    if (hit) wins++
+    else losses++
+    strengthSum += signal.strengthScore
+    count++
+  }
+
+  return {
+    token,
+    windowCount: count,
+    wins,
+    losses,
+    winRate: count > 0 ? wins / count : 0,
+    avgStrength: count > 0 ? strengthSum / count : 0,
+    disclaimer: 'DEMO v1 retrospective in-sample backtest only. Suffers from look-ahead bias. Does NOT predict future performance. Not financial advice.',
+  }
+}
+
 // ── Commit hash ──────────────────────────────────────────────────────────────
 //
 // Must exactly match Solidity:

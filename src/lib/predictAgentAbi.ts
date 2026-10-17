@@ -30,6 +30,7 @@ export const PREDICT_AGENT_ABI = [
   { type: 'error', name: 'PredictAgent__TransferFailed', inputs: [] },
   { type: 'error', name: 'PredictAgent__RequestNotFound', inputs: [{ name: 'requestId', type: 'uint256' }] },
   { type: 'error', name: 'PredictAgent__RenounceDisabled', inputs: [] },
+  { type: 'error', name: 'PredictAgent__RevealOffsetOutOfBounds', inputs: [{ name: 'requested', type: 'uint256' }, { name: 'min', type: 'uint256' }, { name: 'max', type: 'uint256' }] },
   // --- events ---
   {
     type: 'event', name: 'RequestCreated',
@@ -115,6 +116,7 @@ export const PREDICT_AGENT_ABI = [
       { name: 'tokenSymbol', type: 'string' },
       { name: 'windowOpen', type: 'uint256' },
       { name: 'windowClose', type: 'uint256' },
+      { name: 'buyerRevealOffset', type: 'uint256' },
     ],
     outputs: [{ name: 'requestId', type: 'uint256' }],
   },
@@ -171,6 +173,11 @@ export const PREDICT_AGENT_ABI = [
     outputs: [],
   },
   {
+    type: 'function', name: 'setRevealOffsetBounds', stateMutability: 'nonpayable',
+    inputs: [{ name: 'newMin', type: 'uint256' }, { name: 'newMax', type: 'uint256' }],
+    outputs: [],
+  },
+  {
     type: 'function', name: 'pause', stateMutability: 'nonpayable',
     inputs: [], outputs: [],
   },
@@ -201,6 +208,7 @@ export const PREDICT_AGENT_ABI = [
         { name: 'feePaid', type: 'uint256' },
         { name: 'outcomeRecorded', type: 'bool' },
         { name: 'outcomeCorrect', type: 'bool' },
+        { name: 'buyerRevealDeadline', type: 'uint256' },
       ],
     }],
   },
@@ -250,5 +258,17 @@ export const PREDICT_AGENT_ABI = [
   {
     type: 'function', name: 'owner', stateMutability: 'view',
     inputs: [], outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function', name: 'minRevealOffset', stateMutability: 'view',
+    inputs: [], outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function', name: 'maxRevealOffset', stateMutability: 'view',
+    inputs: [], outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'event', name: 'RevealOffsetBoundsUpdated',
+    inputs: [{ name: 'newMin', type: 'uint256', indexed: false }, { name: 'newMax', type: 'uint256', indexed: false }],
   },
 ] as const

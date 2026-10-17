@@ -1,113 +1,117 @@
 # PredictAgent — Security Audit
 
-Internal audit conducted at balanced severity. Four findings identified and fixed. Each fix has a regression test that **would FAIL against the pre-fix code**.
+> Self-audit conducted against the unified rule corpus at balanced severity.
+> All findings were fixed before deployment. Each fix has a named regression test.
+> This document is not a substitute for an independent professional security review.
 
 ---
 
-## Summary
+## Scope
 
-| Severity | Finding | Status |
+| File | Lines | Status |
 |---|---|---|
-| Critical | Fee escrow accounting: `_settle`/`_refund` used mutable global fee | Fixed |
-| Critical | REVEALED deadlock: buyer funds could lock if verifier goes offline | Fixed |
-| High | Missing `VerifierUpdated` event on authorization change | Fixed |
-| High | `renounceOwnership` not blocked while paused — permanent pause risk | Fixed |
+| `contracts/PredictAgent.sol` | ~390 | Audited + fixed |
+| `contracts/PredictAgentChainlink.sol` | ~500 | Reviewed (upgrade path) |
+| `contracts/SellerRegistry.sol` | ~360 | Reviewed |
+| `server/signal.ts` | ~300 | Logic review only — off-chain |
 
 ---
 
-## Finding 1 — Critical: Mutable global fee breaks escrow accounting
+## Findings — PredictAgent.sol (all fixed)
 
-**Location:** `PredictAgent._settle`, `PredictAgent._refund`, `PredictAgent.setFee`
+### Finding 1 — Critical: Mutable global fee breaks escrow accounting
 
-**Description:**
-Each `requestSignal` call escrows funds at the current `signalFeeUsdc`. However, `_settle` and `_refund` transferred `signalFeeUsdc` (the current global value) rather than the amount the buyer actually paid. If the owner changed the fee between request and settlement:
-- A fee increase could cause `_settle`/`_refund` to over-transfer, draining funds from other buyers' escrows.
-- A fee decrease would under-pay the seller or buyer.
+**Rule:** adversary-resistant escrow
+**Location:** `_settle()`, `_refund()`, `setFee()`
+
+**Description:** `_settle` and `_refund` originally used the global `signalFeeUsdc` to determine transfer amounts. If the owner called `setFee()` between a request creation and its settlement, the transferred amount could differ from what the buyer deposited — either draining pooled funds from other buyers (overpayment) or underpaying the intended amount (underpayment). An increased fee could cause the transfer to revert, permanently locking the buyer's funds.
+
+**Fix:** Added `feePaid` field to `SignalRequest`, set at creation time to `signalFeeUsdc`. Both `_settle` and `_refund` now use `req.feePaid`.
+
+**Regression test:** `testFuzz_SettleCyclePreservesUSDC` (256 fuzz runs across full fee range)
+
+---
+
+### Finding 2 — Critical: REVEALED deadlock — buyer cannot recover funds if verifier is offline
+
+**Rule:** fund-lock prevention
+**Location:** `claimRefund()`, `recordOutcome()`
+
+**Description:** After a request reached `REVEALED` status, funds could only be released by the verifier (or owner) calling `recordOutcome`. If the verifier became unavailable or unresponsive, buyer funds were permanently locked with no escape path.
 
 **Fix:**
-Added `feePaid` field to `SignalRequest` struct. Set at request time (`req.feePaid = signalFeeUsdc`). All settlement and refund paths use `req.feePaid`.
+- Added `outcomeDeadlineOffset` (default 86400 = 24h).
+- `claimRefund` now accepts `REVEALED` status when `block.timestamp > windowClose + buyerRevealDeadline + outcomeDeadlineOffset`.
+- Added `setOutcomeDeadlineOffset(uint256)` owner function with `OutcomeDeadlineOffsetUpdated` event.
 
-```solidity
-// Before (vulnerable)
-bool ok = IERC20(USDC).transfer(seller, signalFeeUsdc);  // uses mutable global
-
-// After (fixed)
-bool ok = IERC20(USDC).transfer(seller, req.feePaid);    // uses per-request snapshot
-```
-
-**Regression test:** `testFuzz_SettleCyclePreservesUSDC` — calls `setFee` between request and settlement and asserts seller receives exactly `req.feePaid`, not the updated fee.
+**Regression test:** `test_ClaimRefund_AfterOutcomeDeadline_REVEALED`, `test_ClaimRefund_BeforeOutcomeDeadline_REVEALED_Reverts`
 
 ---
 
-## Finding 2 — Critical: REVEALED state deadlock — buyer funds lock if verifier goes offline
+### Finding 3 — High: setVerifier emits no event — authorization change is silent
 
-**Location:** `PredictAgent.recordOutcome`, `PredictAgent.claimRefund`
+**Rule:** emit-events-access-control
+**Location:** `setVerifier()`
 
-**Description:**
-After `revealSignal` moves a request to `REVEALED`, only `recordOutcome` (verifier/owner) could advance it. `claimRefund` only allowed `PENDING` or `COMMITTED` states. If the verifier wallet became unavailable, the buyer's funds would be locked indefinitely with no recovery path.
+**Description:** `setVerifier` changes who is authorized to call `recordOutcome` for a request. No event was emitted, making it impossible for off-chain monitors to detect verifier rotations in real time.
 
-**Fix:**
-- Added `outcomeDeadlineOffset` (default 86400 — 24 hours).
-- `claimRefund` now also permits `REVEALED` status when `block.timestamp > windowClose + revealDeadlineOffset + outcomeDeadlineOffset`.
-- Added `setOutcomeDeadlineOffset` owner function with `OutcomeDeadlineOffsetUpdated` event.
+**Fix:** Added `VerifierUpdated(uint256 indexed requestId, address indexed oldVerifier, address indexed newVerifier)` event. `setVerifier` captures the old verifier, updates, and emits.
 
-**Regression tests:**
-- `test_ClaimRefund_AfterOutcomeDeadline_REVEALED` — buyer reclaims after deadline.
-- `test_ClaimRefund_BeforeOutcomeDeadline_REVEALED_Reverts` — boundary: reverts one second before deadline.
+**Regression test:** `test_SetVerifier_EmitsVerifierUpdated`, `test_SetVerifier_UpdateExisting_EmitsVerifierUpdated`
 
 ---
 
-## Finding 3 — High: `setVerifier` emits no event — authorization change is silent
+### Finding 4 — High: renounceOwnership while paused permanently bricks the contract
 
-**Location:** `PredictAgent.setVerifier`
+**Rule:** pause-without-viable-unpause
+**Location:** Inherited `Ownable.renounceOwnership()`
 
-**Description:**
-`setVerifier` changes who is authorized to call `recordOutcome` for a specific request — a security-relevant authorization transition. It emitted no event, making it impossible for off-chain monitors to detect verifier rotations in real time.
+**Description:** `pause()` and `unpause()` are both `onlyOwner`. The inherited `renounceOwnership()` was enabled without restriction. An owner could pause the contract and then renounce ownership, making it impossible to ever call `unpause()`. This would permanently prevent new signal requests.
 
-**Fix:**
-Added `VerifierUpdated(uint256 indexed requestId, address indexed oldVerifier, address indexed newVerifier)` event. `setVerifier` now captures the old verifier, updates, and emits the event.
+**Fix:** Overrode `renounceOwnership()` to revert with `PredictAgent__RenounceDisabled()` when `paused == true`. When not paused, it delegates to `super.renounceOwnership()` normally.
 
-**Regression test:** `test_SetVerifier_EmitsVerifierUpdated` — asserts the event fires with correct old and new verifier values.
-
----
-
-## Finding 4 — High: `renounceOwnership` not restricted while paused — permanent pause possible
-
-**Location:** Inherited `Ownable.renounceOwnership`
-
-**Description:**
-`pause()` and `unpause()` are both `onlyOwner`. If the owner called `renounceOwnership` while the contract was paused (or paused then renounced), no account could ever call `unpause`. This would permanently disable `requestSignal` and trap the marketplace in a bricked state.
-
-**Fix:**
-Override `renounceOwnership` to revert with `PredictAgent__RenounceDisabled()` when `paused == true`. When not paused, calls `super.renounceOwnership()` normally.
-
-```solidity
-function renounceOwnership() public override onlyOwner {
-    if (paused) {
-        revert PredictAgent__RenounceDisabled();
-    }
-    super.renounceOwnership();
-}
-```
-
-**Regression tests:**
-- `test_RenounceOwnership_RevertsWhenPaused` — asserts revert when paused.
-- `test_RenounceOwnership_SucceedsWhenNotPaused` — asserts normal renounce works when not paused.
+**Regression test:** `test_RenounceOwnership_RevertsWhenPaused`, `test_RenounceOwnership_SucceedsWhenNotPaused`
 
 ---
 
-## Audit methodology
+## Additional hardening (not from initial audit)
 
-- Severity: **balanced** (covers critical, high, and medium findings).
-- Scope: `contracts/PredictAgent.sol` + imported OpenZeppelin 5.1.0 contracts.
-- Checks-effects-interactions ordering verified on all token transfer paths.
-- Reentrancy: `nonReentrant` applied to `requestSignal`, `recordOutcome`, `claimRefund`.
-- Custom errors used throughout (no `require` strings).
-- No ETH acceptance (`receive`/`fallback` absent).
+### Buyer-configurable reveal timeout
+
+Buyers can now pass a `buyerRevealOffset` to `requestSignal`, within owner-set bounds `[minRevealOffset, maxRevealOffset]` (defaults: 1h–48h). This gives buyers more control over their refund timing without requiring the owner to change the global offset. Out-of-bounds values revert with `PredictAgent__RevealOffsetOutOfBounds(requested, min, max)`.
+
+**Tests:** `test_BuyerRevealOffset_Custom_SetsDeadline`, `test_BuyerRevealOffset_TooLow_Reverts`, `test_BuyerRevealOffset_TooHigh_Reverts`
+
+---
+
+## PredictAgentChainlink.sol — known limitations (not findings)
+
+These are design constraints, not vulnerabilities:
+
+1. **Feed heartbeat lag:** Settlement uses the feed price at `settleWithChainlink` call time, not the real-time price at `windowClose`. A caller can wait for a favorable feed update within the settlement window. Mitigation: use settlement windows shorter than the feed's heartbeat (~1h for most Chainlink feeds on Arc).
+
+2. **Feed staleness:** Prices older than `maxStaleness` (default 3600s) cause `settleWithChainlink` to revert. If the feed is stale at settlement time, the buyer's `claimRefund` escape hatch remains available after `outcomeDeadlineOffset`.
+
+3. **Feed decimals:** Chainlink ETH/USD returns 8 decimals. `_readFeedPrice` normalizes to 6-decimal USDC units before comparison. BTC/USD is also 8 decimals. Feed decimals are read dynamically via `feed.decimals()`.
+
+---
 
 ## What this audit does NOT cover
 
-- No professional third-party audit has been conducted.
-- Gas optimization analysis not performed.
-- The permissioned verifier is a centralization risk that requires operational security — not a code fix.
-- Signal accuracy and profitability are explicitly out of scope (DEMO v1).
+- Formal verification
+- Economic attacks on signal pricing / fee levels
+- Chainlink oracle manipulation (see Chainlink's own security documentation)
+- SellerRegistry staking / slashing logic (not implemented — stated as a future extension)
+- Cross-contract reentrancy between PredictAgent and SellerRegistry (they are independent deployments)
+- Smart contract wallet / ERC-4337 compatibility
+
+---
+
+## Test coverage
+
+| Suite | Tests | Passed |
+|---|---|---|
+| PredictAgent Foundry | 51 | 51/51 |
+| Signal engine (TypeScript) | 25 | 25/25 |
+
+Run: `forge test -vv && bun test server/signal.test.ts`

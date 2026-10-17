@@ -34,6 +34,8 @@ contract PredictAgentTest is Test {
     uint256 internal constant FEE = 10e6;           // 10 USDC (6 decimals)
     uint256 internal constant REVEAL_OFFSET  = 3600;  // default in constructor
     uint256 internal constant OUTCOME_OFFSET = 86400; // default outcomeDeadlineOffset
+    uint256 internal constant MIN_REVEAL_OFFSET = 3600;   // default minRevealOffset
+    uint256 internal constant MAX_REVEAL_OFFSET = 172800; // default maxRevealOffset
 
     // ─── timing helpers ──────────────────────────────────────────────────────
     uint256 internal T0;          // "now" at setUp
@@ -88,10 +90,10 @@ contract PredictAgentTest is Test {
     }
 
     /// Walk the contract from PENDING all the way to COMMITTED.
-    /// Returns the requestId.
+    /// Returns the requestId.  Passes buyerRevealOffset=0 (use global default).
     function _doRequest() internal returns (uint256 requestId) {
         vm.prank(buyer);
-        requestId = agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE);
+        requestId = agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE, 0);
     }
 
     /// Walk from PENDING → COMMITTED (also calls _doRequest internally).
@@ -292,7 +294,7 @@ contract PredictAgentTest is Test {
 
         vm.expectRevert(PredictAgent.PredictAgent__Paused.selector);
         vm.prank(buyer);
-        agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE);
+        agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE, 0);
     }
 
     function test_RequestSignal_SucceedsAfterUnpause() public {
@@ -306,7 +308,7 @@ contract PredictAgentTest is Test {
 
         // Request should succeed.
         vm.prank(buyer);
-        uint256 requestId = agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE);
+        uint256 requestId = agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE, 0);
         assertEq(requestId, 1, "requestId should be 1");
     }
 
@@ -500,13 +502,16 @@ contract PredictAgentTest is Test {
     //  Additional: deployment / initialization
     // ─────────────────────────────────────────────────────────────────────────
     function test_Deployment_InitialState() public view {
-        assertEq(agent.seller(),               sellerAcc,      "seller mismatch");
-        assertEq(agent.signalFeeUsdc(),        FEE,            "fee mismatch");
-        assertEq(agent.revealDeadlineOffset(), REVEAL_OFFSET,  "reveal offset mismatch");
-        assertEq(agent.outcomeDeadlineOffset(), OUTCOME_OFFSET, "outcome offset mismatch");
-        assertEq(agent.nextRequestId(),        1,              "nextRequestId should start at 1");
-        assertFalse(agent.paused(),                            "should not be paused");
-        assertEq(agent.owner(),                owner,          "owner mismatch");
+        assertEq(agent.seller(),               sellerAcc,         "seller mismatch");
+        assertEq(agent.signalFeeUsdc(),        FEE,               "fee mismatch");
+        assertEq(agent.revealDeadlineOffset(), REVEAL_OFFSET,     "reveal offset mismatch");
+        assertEq(agent.outcomeDeadlineOffset(), OUTCOME_OFFSET,   "outcome offset mismatch");
+        assertEq(agent.nextRequestId(),        1,                 "nextRequestId should start at 1");
+        assertFalse(agent.paused(),                               "should not be paused");
+        assertEq(agent.owner(),                owner,             "owner mismatch");
+        // New in updated contract: reveal offset bounds
+        assertEq(agent.minRevealOffset(), MIN_REVEAL_OFFSET, "minRevealOffset mismatch");
+        assertEq(agent.maxRevealOffset(), MAX_REVEAL_OFFSET, "maxRevealOffset mismatch");
     }
 
     function test_Deployment_InvalidSeller_Reverts() public {
@@ -527,7 +532,7 @@ contract PredictAgentTest is Test {
         emit PredictAgent.RequestCreated(1, buyer, "BTC", WINDOW_OPEN, WINDOW_CLOSE, FEE);
 
         vm.prank(buyer);
-        uint256 requestId = agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE);
+        uint256 requestId = agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE, 0);
 
         assertEq(requestId, 1, "first requestId should be 1");
         assertEq(agent.nextRequestId(), 2, "nextRequestId should be 2");
@@ -541,19 +546,148 @@ contract PredictAgentTest is Test {
         assertEq(uint8(req.status), uint8(PredictAgent.RequestStatus.PENDING), "not PENDING");
         // feePaid must be snapshotted at the fee active when the request was created.
         assertEq(req.feePaid, FEE, "req.feePaid not stored correctly");
+        // Default offset: buyerRevealDeadline == global revealDeadlineOffset (3600)
+        assertEq(req.buyerRevealDeadline, REVEAL_OFFSET, "buyerRevealDeadline should default to revealDeadlineOffset");
     }
 
     function test_RequestSignal_InvalidWindow_Reverts() public {
         // windowOpen in the past
         vm.expectRevert(PredictAgent.PredictAgent__WindowNotOpen.selector);
         vm.prank(buyer);
-        agent.requestSignal("BTC", T0 - 1, WINDOW_CLOSE);
+        agent.requestSignal("BTC", T0 - 1, WINDOW_CLOSE, 0);
     }
 
     function test_RequestSignal_WindowCloseBeforeOpen_Reverts() public {
         vm.expectRevert(PredictAgent.PredictAgent__WindowNotOpen.selector);
         vm.prank(buyer);
-        agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_OPEN - 1);
+        agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_OPEN - 1, 0);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  NEW: requestSignal with buyer-chosen buyerRevealOffset
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Buyer passes a valid custom offset (7200 = 2h); req.buyerRevealDeadline must match.
+    function test_RequestSignal_BuyerRevealOffset_WithinBounds() public {
+        uint256 customOffset = 7200; // 2 hours — within [3600, 172800]
+
+        vm.prank(buyer);
+        uint256 requestId = agent.requestSignal("ETH", WINDOW_OPEN, WINDOW_CLOSE, customOffset);
+
+        PredictAgent.SignalRequest memory req = agent.getRequest(requestId);
+        assertEq(req.buyerRevealDeadline, customOffset, "buyerRevealDeadline should equal customOffset");
+    }
+
+    /// Buyer passes an offset below minRevealOffset (100 < 3600) → RevealOffsetOutOfBounds.
+    function test_RequestSignal_BuyerRevealOffset_TooLow() public {
+        uint256 tooLow = 100; // below minRevealOffset=3600
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PredictAgent.PredictAgent__RevealOffsetOutOfBounds.selector,
+                tooLow,
+                MIN_REVEAL_OFFSET,
+                MAX_REVEAL_OFFSET
+            )
+        );
+        vm.prank(buyer);
+        agent.requestSignal("ETH", WINDOW_OPEN, WINDOW_CLOSE, tooLow);
+    }
+
+    /// Buyer passes an offset above maxRevealOffset (999999 > 172800) → RevealOffsetOutOfBounds.
+    function test_RequestSignal_BuyerRevealOffset_TooHigh() public {
+        uint256 tooHigh = 999_999; // above maxRevealOffset=172800
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PredictAgent.PredictAgent__RevealOffsetOutOfBounds.selector,
+                tooHigh,
+                MIN_REVEAL_OFFSET,
+                MAX_REVEAL_OFFSET
+            )
+        );
+        vm.prank(buyer);
+        agent.requestSignal("ETH", WINDOW_OPEN, WINDOW_CLOSE, tooHigh);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  NEW: setRevealOffsetBounds
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Owner updates bounds; state reflects new values and RevealOffsetBoundsUpdated is emitted.
+    function test_SetRevealOffsetBounds_UpdatesAndEmits() public {
+        uint256 newMin = 7200;
+        uint256 newMax = 86400;
+
+        vm.expectEmit(false, false, false, true, address(agent));
+        emit PredictAgent.RevealOffsetBoundsUpdated(newMin, newMax);
+
+        vm.prank(owner);
+        agent.setRevealOffsetBounds(newMin, newMax);
+
+        assertEq(agent.minRevealOffset(), newMin, "minRevealOffset not updated");
+        assertEq(agent.maxRevealOffset(), newMax, "maxRevealOffset not updated");
+    }
+
+    /// Non-owner calling setRevealOffsetBounds reverts (OwnableUnauthorizedAccount).
+    function test_SetRevealOffsetBounds_NonOwner_Reverts() public {
+        vm.expectRevert(); // OwnableUnauthorizedAccount
+        vm.prank(stranger);
+        agent.setRevealOffsetBounds(7200, 86400);
+    }
+
+    /// Owner sets newMin=0 → require("invalid bounds") revert.
+    function test_SetRevealOffsetBounds_InvalidBounds_Reverts() public {
+        vm.expectRevert(bytes("invalid bounds"));
+        vm.prank(owner);
+        agent.setRevealOffsetBounds(0, 86400);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  NEW: buyer-chosen buyerRevealOffset (aliased entry-point tests)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Pass offset=7200; req.buyerRevealDeadline must equal 7200.
+    function test_BuyerRevealOffset_Custom_SetsDeadline() public {
+        uint256 customOffset = 7200; // 2 hours — within [3600, 172800]
+
+        vm.prank(buyer);
+        uint256 requestId = agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE, customOffset);
+
+        PredictAgent.SignalRequest memory req = agent.getRequest(requestId);
+        assertEq(req.buyerRevealDeadline, customOffset, "buyerRevealDeadline should equal 7200");
+    }
+
+    /// Pass offset=100 (below minRevealOffset 3600) → RevealOffsetOutOfBounds.
+    function test_BuyerRevealOffset_TooLow_Reverts() public {
+        uint256 tooLow = 100;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PredictAgent.PredictAgent__RevealOffsetOutOfBounds.selector,
+                tooLow,
+                MIN_REVEAL_OFFSET,
+                MAX_REVEAL_OFFSET
+            )
+        );
+        vm.prank(buyer);
+        agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE, tooLow);
+    }
+
+    /// Pass offset=999999 (above maxRevealOffset 172800) → RevealOffsetOutOfBounds.
+    function test_BuyerRevealOffset_TooHigh_Reverts() public {
+        uint256 tooHigh = 999_999;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PredictAgent.PredictAgent__RevealOffsetOutOfBounds.selector,
+                tooHigh,
+                MIN_REVEAL_OFFSET,
+                MAX_REVEAL_OFFSET
+            )
+        );
+        vm.prank(buyer);
+        agent.requestSignal("BTC", WINDOW_OPEN, WINDOW_CLOSE, tooHigh);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -724,7 +858,7 @@ contract PredictAgentTest is Test {
 
         // Full cycle.
         vm.prank(buyer);
-        uint256 requestId = agent.requestSignal("ETH", WINDOW_OPEN, WINDOW_CLOSE);
+        uint256 requestId = agent.requestSignal("ETH", WINDOW_OPEN, WINDOW_CLOSE, 0);
 
         // Verify feePaid was snapshotted correctly at request time.
         PredictAgent.SignalRequest memory reqSnap = agent.getRequest(requestId);

@@ -14,6 +14,8 @@ export function useContractInfo() {
       { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'paused', chainId: CHAIN_ID },
       { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'revealDeadlineOffset', chainId: CHAIN_ID },
       { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'outcomeDeadlineOffset', chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'minRevealOffset', chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'maxRevealOffset', chainId: CHAIN_ID },
     ],
     query: { enabled: !!addr, refetchInterval: 15_000 },
   })
@@ -26,6 +28,8 @@ export function useContractInfo() {
     paused: (data?.[3]?.result) ?? false,
     revealDeadlineOffset: (data?.[4]?.result) ?? 3600n,
     outcomeDeadlineOffset: (data?.[5]?.result) ?? 86400n,
+    minRevealOffset: (data?.[6]?.result) ?? 3600n,
+    maxRevealOffset: (data?.[7]?.result) ?? 172800n,
   }
 }
 
@@ -65,6 +69,7 @@ export interface SignalRequest {
   feePaid: bigint
   outcomeRecorded: boolean
   outcomeCorrect: boolean
+  buyerRevealDeadline: bigint
 }
 
 export function useRequest(requestId: bigint | undefined) {
