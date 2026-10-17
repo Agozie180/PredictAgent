@@ -234,11 +234,14 @@ Bun.serve({
       const limit = Math.min(500, Math.max(60, parseInt(url.searchParams.get('limit') ?? '200', 10)))
       if (!token) return json({ error: 'Missing ?token=' }, 400)
       if (!SUPPORTED_TOKENS.includes(token)) return json({ error: `Unsupported token: ${token}` }, 400)
+      const includeTrades = url.searchParams.get('trades') === 'true'
       try {
         const candles = await fetchCandles(token, limit)
         const result = backtestSignal(token, candles)
+        const { trades, ...summary } = result
         return json({
-          ...result,
+          ...summary,
+          ...(includeTrades ? { trades } : { tradesOmitted: trades.length, hint: 'Add ?trades=true to include per-trade breakdown' }),
           candles: candles.length,
           warning: 'DEMO v1 retrospective backtest only — in-sample, look-ahead bias applies. Do NOT use for investment decisions.',
         })

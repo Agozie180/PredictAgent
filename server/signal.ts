@@ -211,57 +211,132 @@ export function computeSignal(token: string, candles: Candle[]): SignalOutput {
 // It measures internal consistency of the rules, NOT future profitability.
 // DO NOT use these numbers to make investment decisions.
 
+export interface BacktestTrade {
+  index: number
+  direction: Direction
+  entryPrice: number
+  targetPrice: number
+  bandPct: number
+  strengthScore: number
+  /** true = price moved in signal direction before opposite band hit */
+  directionalWin: boolean
+  /** true = price touched target band within forward window */
+  bandHit: boolean
+  forwardReturn: number  // % price change over forward window
+}
+
 export interface BacktestResult {
   token: string
   windowCount: number
-  wins: number
+  wins: number               // directional wins
   losses: number
-  winRate: number        // 0–1
-  avgStrength: number    // mean signal strength score at entry
+  bandHits: number           // looser metric: target band touched
+  winRate: number            // directional accuracy (stricter)
+  bandHitRate: number        // band-hit rate (wider metric)
+  avgStrength: number
+  avgForwardReturn: number   // mean % return when following signal
+  bullishCount: number
+  bearishCount: number
+  strongSignalWinRate: number   // win rate when strengthScore >= 65
+  weakSignalWinRate: number     // win rate when strengthScore < 65
+  trades: BacktestTrade[]
   /** Stated as data only — not a profitability guarantee */
   disclaimer: string
 }
 
-export function backtestSignal(token: string, candles: Candle[], windowSize = 60, step = 6): BacktestResult {
-  const MIN = 55  // matches computeSignal MIN_CANDLES
-  if (candles.length < windowSize) throw new Error(`Need at least ${windowSize} candles`)
+/**
+ * Runs computeSignal() over a sliding window and scores each signal two ways:
+ *
+ * 1. Directional win (strict): price moved in signal direction by at least
+ *    half the ATR before moving against it by the full ATR.
+ * 2. Band hit (loose): price touched the target band within `forwardBars` candles.
+ *
+ * IMPORTANT: retrospective in-sample backtest. Look-ahead bias applies.
+ * windowSize=60 (training), forwardBars=6 (evaluation), step=3 (stride).
+ * A step=1 would double-count overlapping windows — step=3 balances coverage
+ * and independence.
+ */
+export function backtestSignal(
+  token: string,
+  candles: Candle[],
+  windowSize = 60,
+  step = 3,
+  forwardBars = 6,
+): BacktestResult {
+  const MIN = 55
+  if (candles.length < windowSize + forwardBars) {
+    throw new Error(`Need at least ${windowSize + forwardBars} candles, got ${candles.length}`)
+  }
 
-  let wins = 0
-  let losses = 0
-  let strengthSum = 0
-  let count = 0
+  const trades: BacktestTrade[] = []
 
-  // Slide window across candles, leaving enough tail to check outcome
-  for (let i = MIN; i + step < candles.length; i += step) {
+  for (let i = MIN; i + forwardBars <= candles.length; i += step) {
     const slice = candles.slice(Math.max(0, i - windowSize), i)
     if (slice.length < MIN) continue
 
     let signal: SignalOutput
     try { signal = computeSignal(token, slice) } catch { continue }
 
-    // "Outcome": did the price hit the target within the next `step` candles?
+    const entryPrice = candles[i - 1].close
     const target = Number(signal.targetPrice) / 1_000_000
-    const band = Number(signal.confidenceBandBps) / 10_000
-    const lower = target * (1 - band)
-    const upper = target * (1 + band)
+    const bandPct = Number(signal.confidenceBandBps) / 10_000
+    const bandSize = entryPrice * bandPct
 
-    const future = candles.slice(i, Math.min(i + step, candles.length))
-    const hit = future.some(c => c.high >= lower && c.low <= upper)
+    const future = candles.slice(i, Math.min(i + forwardBars, candles.length))
+    const exitPrice = future[future.length - 1]?.close ?? entryPrice
+    const forwardReturn = entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0
 
-    if (hit) wins++
-    else losses++
-    strengthSum += signal.strengthScore
-    count++
+    // Directional win: did price move toward target before moving away by a full band?
+    let directionalWin = false
+    let bandHit = false
+    for (const c of future) {
+      if (signal.direction === 'BULLISH') {
+        if (c.high >= target - bandSize) { bandHit = true }
+        if (c.high >= target) { directionalWin = true; break }
+        if (c.low < entryPrice - bandSize) break  // stopped out
+      } else {
+        if (c.low <= target + bandSize) { bandHit = true }
+        if (c.low <= target) { directionalWin = true; break }
+        if (c.high > entryPrice + bandSize) break  // stopped out
+      }
+    }
+
+    trades.push({
+      index: i,
+      direction: signal.direction,
+      entryPrice,
+      targetPrice: target,
+      bandPct: bandPct * 100,
+      strengthScore: signal.strengthScore,
+      directionalWin,
+      bandHit,
+      forwardReturn: signal.direction === 'BULLISH' ? forwardReturn : -forwardReturn,
+    })
   }
+
+  const wins   = trades.filter(t => t.directionalWin).length
+  const losses = trades.length - wins
+  const bandHits = trades.filter(t => t.bandHit).length
+
+  const strongTrades = trades.filter(t => t.strengthScore >= 65)
+  const weakTrades   = trades.filter(t => t.strengthScore < 65)
 
   return {
     token,
-    windowCount: count,
+    windowCount: trades.length,
     wins,
     losses,
-    winRate: count > 0 ? wins / count : 0,
-    avgStrength: count > 0 ? strengthSum / count : 0,
-    disclaimer: 'DEMO v1 retrospective in-sample backtest only. Suffers from look-ahead bias. Does NOT predict future performance. Not financial advice.',
+    bandHits,
+    winRate: trades.length > 0 ? wins / trades.length : 0,
+    bandHitRate: trades.length > 0 ? bandHits / trades.length : 0,
+    avgStrength: trades.length > 0 ? trades.reduce((s, t) => s + t.strengthScore, 0) / trades.length : 0,
+    avgForwardReturn: trades.length > 0 ? trades.reduce((s, t) => s + t.forwardReturn, 0) / trades.length : 0,
+    bullishCount: trades.filter(t => t.direction === 'BULLISH').length,
+    bearishCount: trades.filter(t => t.direction === 'BEARISH').length,
+    strongSignalWinRate: strongTrades.length > 0 ? strongTrades.filter(t => t.directionalWin).length / strongTrades.length : 0,
+    weakSignalWinRate:   weakTrades.length > 0   ? weakTrades.filter(t => t.directionalWin).length / weakTrades.length : 0,
+    trades,
+    disclaimer: 'DEMO v1 retrospective in-sample backtest. Suffers from look-ahead bias. Does NOT predict future performance. Not financial advice.',
   }
 }
 

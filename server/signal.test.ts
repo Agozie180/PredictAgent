@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { computeSignal, computeCommitHash, stringToBytes32, type Candle } from './signal'
+import { computeSignal, computeCommitHash, stringToBytes32, backtestSignal, type Candle } from './signal'
 import { ema, rsi, bollingerBands, macd, volumeMetrics, atr, signalStrengthScore } from './indicators'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -237,6 +237,61 @@ describe('computeCommitHash()', () => {
     const direct = computeCommitHash(requestId, dir32, signal.targetPrice, signal.confidenceBandBps, signal.timestamp, signal.nonce)
     const fromClosure = signal.commitHash(requestId)
     expect(fromClosure).toBe(direct)
+  })
+})
+
+// ── backtestSignal() ──────────────────────────────────────────────────────────
+
+describe('backtestSignal()', () => {
+  it('throws if too few candles', () => {
+    expect(() => backtestSignal('BTC', makeCandles(30, 50000, 0))).toThrow()
+  })
+
+  it('returns correct structure with expected fields', () => {
+    const candles = makeCandles(120, 50000, 0.002)
+    const result = backtestSignal('BTC', candles)
+    expect(result.token).toBe('BTC')
+    expect(result.windowCount).toBeGreaterThan(0)
+    expect(result.wins + result.losses).toBe(result.windowCount)
+    expect(result.winRate).toBeGreaterThanOrEqual(0)
+    expect(result.winRate).toBeLessThanOrEqual(1)
+    expect(result.bandHitRate).toBeGreaterThanOrEqual(0)
+    expect(result.bandHitRate).toBeLessThanOrEqual(1)
+    expect(result.bullishCount + result.bearishCount).toBe(result.windowCount)
+    expect(result.trades).toHaveLength(result.windowCount)
+    expect(result.disclaimer).toContain('in-sample')
+  })
+
+  it('produces more windows with more candles', () => {
+    const small = backtestSignal('BTC', makeCandles(80, 50000, 0.001))
+    const large = backtestSignal('BTC', makeCandles(200, 50000, 0.001))
+    expect(large.windowCount).toBeGreaterThan(small.windowCount)
+  })
+
+  it('strong signal win rate >= weak signal win rate on a clear trend', () => {
+    // Strong uptrend: RSI, EMA, MACD all align → high strength → strong signals should win more
+    const candles = makeCandles(150, 40000, 0.003)
+    const result = backtestSignal('BTC', candles)
+    if (result.trades.filter(t => t.strengthScore >= 65).length > 5 &&
+        result.trades.filter(t => t.strengthScore < 65).length > 5) {
+      // strongSignalWinRate should be >= weakSignalWinRate when trend is consistent
+      expect(result.strongSignalWinRate).toBeGreaterThanOrEqual(result.weakSignalWinRate - 0.1)
+    }
+  })
+
+  it('each trade has valid fields', () => {
+    const candles = makeCandles(100, 50000, 0.002)
+    const result = backtestSignal('BTC', candles)
+    for (const t of result.trades) {
+      expect(['BULLISH', 'BEARISH']).toContain(t.direction)
+      expect(t.entryPrice).toBeGreaterThan(0)
+      expect(t.targetPrice).toBeGreaterThan(0)
+      expect(t.bandPct).toBeGreaterThan(0)
+      expect(t.strengthScore).toBeGreaterThanOrEqual(0)
+      expect(t.strengthScore).toBeLessThanOrEqual(100)
+      expect(typeof t.directionalWin).toBe('boolean')
+      expect(typeof t.bandHit).toBe('boolean')
+    }
   })
 })
 

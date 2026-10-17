@@ -1,13 +1,11 @@
 /**
- * BacktestPanel — DEMO v1 retrospective backtest results.
- *
- * Fetches live backtest results from the signal service and renders
- * a per-token table with win rate, signal count, and average strength.
+ * BacktestPanel — runs retrospective signal backtests via the signal service API
+ * and displays results with full transparency.
  *
  * Prominent disclaimer: in-sample, look-ahead bias, not financial advice.
  */
 import { useState } from 'react'
-import { AlertTriangle, RefreshCw, BarChart2, TrendingUp, TrendingDown } from 'lucide-react'
+import { AlertTriangle, RefreshCw, FlaskConical, TrendingUp, TrendingDown, Info } from 'lucide-react'
 import { SUPPORTED_TOKENS } from '../lib/utils'
 import { TokenIcon } from './TokenIcon'
 
@@ -16,229 +14,293 @@ interface BacktestResult {
   windowCount: number
   wins: number
   losses: number
+  bandHits: number
   winRate: number
+  bandHitRate: number
   avgStrength: number
+  avgForwardReturn: number
+  bullishCount: number
+  bearishCount: number
+  strongSignalWinRate: number
+  weakSignalWinRate: number
+  candles: number
   disclaimer: string
-  warning?: string
-  error?: string
-  candles?: number
+  warning: string
+  tradesOmitted?: number
 }
 
-async function fetchBacktest(token: string): Promise<BacktestResult> {
-  const res = await fetch(`/api/signal/backtest?token=${token}&limit=200`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json() as Promise<BacktestResult>
+function WinBar({ rate, label, color }: { rate: number; label: string; color: string }) {
+  const pct = Math.round(rate * 100)
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex justify-between items-center">
+        <span className="text-[11px]" style={{ color: 'var(--subtle)' }}>{label}</span>
+        <span className="text-sm font-bold tabular-nums" style={{ color }}>{pct}%</span>
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
+  )
+}
+
+function TokenCard({ result }: { result: BacktestResult }) {
+  const winColor = result.winRate >= 0.6 ? 'var(--success)' : result.winRate >= 0.5 ? 'var(--gold)' : 'var(--danger)'
+  const returnColor = result.avgForwardReturn >= 0 ? 'var(--success)' : 'var(--danger)'
+
+  return (
+    <div className="rounded-2xl p-5 flex flex-col gap-4" style={{
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+    }}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <TokenIcon token={result.token} size={22} />
+          <span className="text-base font-bold" style={{ color: 'var(--ink)' }}>{result.token}</span>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{
+            background: 'var(--surface-raised)',
+            color: 'var(--subtle)',
+            border: '1px solid var(--border)',
+          }}>{result.windowCount} signals</span>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-black tabular-nums" style={{ color: winColor, fontVariantNumeric: 'tabular-nums' }}>
+            {Math.round(result.winRate * 100)}%
+          </div>
+          <div className="text-[10px]" style={{ color: 'var(--subtle)' }}>directional</div>
+        </div>
+      </div>
+
+      {/* Win bars */}
+      <div className="flex flex-col gap-2.5">
+        <WinBar rate={result.winRate} label="Directional accuracy (strict)" color={winColor} />
+        <WinBar rate={result.bandHitRate} label="Target band hit rate (loose)" color="var(--accent)" />
+        {result.windowCount > 0 && (
+          <>
+            <WinBar rate={result.strongSignalWinRate} label="Strong signals (score ≥65) win rate" color="var(--success)" />
+            <WinBar rate={result.weakSignalWinRate} label="Weak signals (score <65) win rate" color="var(--muted)" />
+          </>
+        )}
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: 'Windows', value: result.windowCount.toString() },
+          { label: 'Wins', value: result.wins.toString(), color: 'var(--success)' },
+          { label: 'Losses', value: result.losses.toString(), color: result.losses > 0 ? 'var(--danger)' : 'var(--subtle)' },
+          { label: 'Candles', value: result.candles.toString() },
+          { label: 'Avg Strength', value: result.avgStrength.toFixed(0) + '/100' },
+          { label: 'Avg Fwd Rtn', value: (result.avgForwardReturn >= 0 ? '+' : '') + result.avgForwardReturn.toFixed(2) + '%', color: returnColor },
+        ].map(s => (
+          <div key={s.label} className="rounded-xl p-2 text-center" style={{ background: 'var(--surface-raised)' }}>
+            <div className="text-sm font-bold tabular-nums" style={{ color: s.color ?? 'var(--ink-2)' }}>{s.value}</div>
+            <div className="text-[9px] mt-0.5" style={{ color: 'var(--subtle)' }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Signal mix */}
+      <div className="flex gap-2">
+        <div className="flex-1 flex items-center gap-1.5 rounded-xl p-2.5" style={{ background: 'rgba(110,201,138,0.08)', border: '1px solid rgba(110,201,138,0.2)' }}>
+          <TrendingUp size={12} style={{ color: 'var(--success)' }} />
+          <span className="text-xs font-semibold" style={{ color: 'var(--success)' }}>{result.bullishCount} BULLISH</span>
+        </div>
+        <div className="flex-1 flex items-center gap-1.5 rounded-xl p-2.5" style={{ background: 'rgba(240,112,128,0.08)', border: '1px solid rgba(240,112,128,0.2)' }}>
+          <TrendingDown size={12} style={{ color: 'var(--danger)' }} />
+          <span className="text-xs font-semibold" style={{ color: 'var(--danger)' }}>{result.bearishCount} BEARISH</span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function BacktestPanel() {
   const [results, setResults] = useState<Record<string, BacktestResult>>({})
   const [loading, setLoading] = useState(false)
-  const [lastRun, setLastRun] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [candles, setCandles] = useState(500)
+  const [ran, setRan] = useState(false)
 
   async function runBacktests() {
     setLoading(true)
     setError(null)
-    try {
-      const entries = await Promise.all(
-        SUPPORTED_TOKENS.map(t =>
-          fetchBacktest(t).then(r => [t, r] as [string, BacktestResult]).catch(e => [t, { error: String(e), token: t, windowCount: 0, wins: 0, losses: 0, winRate: 0, avgStrength: 0, disclaimer: '' }] as [string, BacktestResult])
-        )
-      )
-      setResults(Object.fromEntries(entries))
-      setLastRun(Date.now())
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
+    const out: Record<string, BacktestResult> = {}
+    const errors: string[] = []
+    await Promise.allSettled(
+      SUPPORTED_TOKENS.map(async token => {
+        try {
+          const res = await fetch(`/api/signal/backtest?token=${token}&limit=${candles}`)
+          if (!res.ok) { errors.push(`${token}: HTTP ${res.status}`); return }
+          const data = await res.json() as BacktestResult
+          if ('error' in data) { errors.push(`${token}: ${(data as { error: string }).error}`); return }
+          out[token] = data
+        } catch (e) {
+          errors.push(`${token}: ${String(e)}`)
+        }
+      })
+    )
+    setResults(out)
+    if (errors.length > 0) setError(errors.join(' | '))
+    setLoading(false)
+    setRan(true)
   }
 
-
-
-  const hasResults = Object.keys(results).length > 0
-  const avgWinRate = hasResults
-    ? Object.values(results).filter(r => !r.error && r.windowCount > 0).reduce((s, r) => s + r.winRate, 0) /
-      Object.values(results).filter(r => !r.error && r.windowCount > 0).length
-    : 0
+  const tokens = Object.values(results)
+  const avgWinRate = tokens.length > 0 ? tokens.reduce((s, t) => s + t.winRate, 0) / tokens.length : 0
+  const totalWindows = tokens.reduce((s, t) => s + t.windowCount, 0)
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
 
-      {/* Disclaimer — always first, always prominent */}
-      <div
-        className="rounded-2xl p-4 flex gap-3"
-        style={{ background: 'rgba(240,112,128,0.08)', border: '1px solid rgba(240,112,128,0.25)' }}
-      >
-        <AlertTriangle size={18} className="shrink-0 mt-0.5" style={{ color: 'var(--danger)' }} />
+      {/* Title + Run */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-sm font-semibold mb-1" style={{ color: 'var(--danger)' }}>
-            DEMO v1 — Retrospective In-Sample Backtest Only
-          </p>
-          <p className="text-xs leading-relaxed" style={{ color: 'var(--subtle)' }}>
-            These results are computed over the same candles used to generate the signal.
-            They suffer from <strong style={{ color: 'var(--ink-2)' }}>look-ahead bias</strong> and
-            cannot predict future performance. Signal logic (RSI, EMA, MACD, Bollinger Bands) is
-            illustrative. <strong style={{ color: 'var(--ink-2)' }}>Not financial advice.</strong> Do
-            not make investment decisions based on these numbers.
-          </p>
-        </div>
-      </div>
-
-      {/* Header + run button */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>Signal Backtest</h2>
-          {lastRun && (
-            <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>
-              Last run: {new Date(lastRun).toLocaleTimeString()} · 200 candles per token · 1h intervals
-            </p>
-          )}
-        </div>
-        <button
-          onClick={() => { void runBacktests() }}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-opacity"
-          style={{
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-            color: 'var(--ink-2)',
-            opacity: loading ? 0.6 : 1,
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Running…' : 'Run Again'}
-        </button>
-      </div>
-
-      {/* Service offline notice */}
-      {error && (
-        <div className="rounded-xl p-4 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--subtle)' }}>
-          Signal service offline — start with <code className="px-1 rounded text-xs" style={{ background: 'var(--surface-2)' }}>bun run server</code>. {error}
-        </div>
-      )}
-
-      {/* Summary stat */}
-      {hasResults && !error && (
-        <div
-          className="rounded-2xl p-5 flex items-center gap-6"
-          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(110,201,138,0.12)' }}>
-              <BarChart2 size={20} style={{ color: 'var(--success)' }} />
-            </div>
-            <div>
-              <p className="text-xs mb-0.5" style={{ color: 'var(--subtle)' }}>AVG WIN RATE ACROSS ALL TOKENS</p>
-              <p className="display text-3xl font-bold tabular-nums" style={{ color: avgWinRate >= 0.55 ? 'var(--success)' : avgWinRate >= 0.45 ? 'var(--ink)' : 'var(--danger)' }}>
-                {(avgWinRate * 100).toFixed(1)}%
-              </p>
-            </div>
+          <div className="flex items-center gap-2.5 mb-1">
+            <FlaskConical size={18} style={{ color: 'var(--accent)' }} />
+            <h2 className="text-xl font-black" style={{ color: 'var(--ink)' }}>Signal Backtest</h2>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,200,80,0.15)', color: 'var(--gold)', border: '1px solid rgba(255,200,80,0.3)' }}>DEMO v1</span>
           </div>
-          <div className="text-xs leading-relaxed ml-auto max-w-xs text-right" style={{ color: 'var(--subtle)' }}>
-            Win = target price hit within next 6 candles. In-sample only.
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>
+            Runs the signal engine over {candles} historical 1h candles — Kraken → CoinGecko fallback.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={candles}
+            onChange={e => setCandles(Number(e.target.value))}
+            disabled={loading}
+            className="rounded-xl px-3 py-2 text-sm"
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink)', border: '1px solid var(--border)' }}
+          >
+            {[100, 200, 500].map(n => (
+              <option key={n} value={n}>{n} candles</option>
+            ))}
+          </select>
+          <button
+            onClick={() => { void runBacktests() }}
+            disabled={loading}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-opacity"
+            style={{
+              background: loading ? 'var(--surface-raised)' : 'var(--accent)',
+              color: loading ? 'var(--muted)' : '#fff',
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            {loading ? 'Running…' : ran ? 'Run Again' : 'Run Backtest'}
+          </button>
+        </div>
+      </div>
+
+      {/* Disclaimer — always visible */}
+      <div className="rounded-2xl p-4 flex gap-3" style={{ background: 'rgba(240,112,128,0.08)', border: '1px solid rgba(240,112,128,0.25)' }}>
+        <AlertTriangle size={16} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 2 }} />
+        <div className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+          <span className="font-bold" style={{ color: 'var(--danger)' }}>RETROSPECTIVE IN-SAMPLE BACKTEST ONLY. </span>
+          These results use the same candles the signal was trained on (look-ahead bias applies).
+          They measure internal consistency of the indicator rules — not future profitability.
+          <span className="font-semibold"> Not financial advice. Past results do not guarantee future outcomes.</span>
+        </div>
+      </div>
+
+      {/* Empty state */}
+      {!ran && !loading && (
+        <div className="rounded-2xl p-12 text-center flex flex-col items-center gap-4" style={{ background: 'var(--surface)', border: '1px dashed var(--border)' }}>
+          <FlaskConical size={36} style={{ color: 'var(--subtle)' }} />
+          <div>
+            <p className="font-semibold mb-1" style={{ color: 'var(--ink-2)' }}>No results yet</p>
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>Click "Run Backtest" to fetch live historical data and score each signal.</p>
           </div>
         </div>
       )}
 
-      {/* Per-token results */}
-      {loading && !hasResults ? (
-        <div className="flex flex-col gap-3">
+      {/* Loading skeletons */}
+      {loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {SUPPORTED_TOKENS.map(t => (
-            <div key={t} className="rounded-2xl p-5 animate-pulse h-20" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }} />
+            <div key={t} className="rounded-2xl p-5 animate-pulse" style={{ background: 'var(--surface)', border: '1px solid var(--border)', height: 280 }} />
           ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {SUPPORTED_TOKENS.map(token => {
-            const r = results[token]
-            if (!r) return null
-            if (r.error) return (
-              <div key={token} className="rounded-2xl p-5 flex items-center gap-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                <TokenIcon token={token} size={28} />
-                <span className="font-bold" style={{ color: 'var(--ink)' }}>{token}</span>
-                <span className="text-xs ml-auto" style={{ color: 'var(--danger)' }}>Failed: {r.error}</span>
-              </div>
-            )
-
-            const wr = r.winRate
-            const wrColor = wr >= 0.6 ? 'var(--success)' : wr >= 0.5 ? 'var(--ink-2)' : wr >= 0.4 ? 'var(--warn, #f0a070)' : 'var(--danger)'
-            const barWidth = `${Math.round(wr * 100)}%`
-
-            return (
-              <div
-                key={token}
-                className="rounded-2xl p-5"
-                style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-              >
-                {/* Row 1: header */}
-                <div className="flex items-center gap-3 mb-4">
-                  <TokenIcon token={token} size={28} />
-                  <span className="font-bold text-base" style={{ color: 'var(--ink)' }}>{token}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full ml-1" style={{ background: 'var(--surface-2)', color: 'var(--subtle)', border: '1px solid var(--border)' }}>
-                    {r.candles ?? r.windowCount * 6 + 55} candles · {r.windowCount} windows
-                  </span>
-                  <span className="ml-auto display text-2xl font-bold tabular-nums" style={{ color: wrColor }}>
-                    {(wr * 100).toFixed(1)}%
-                  </span>
-                </div>
-
-                {/* Win rate bar */}
-                <div className="rounded-full overflow-hidden mb-3" style={{ height: 6, background: 'var(--surface-2)' }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{ width: barWidth, background: wrColor }}
-                  />
-                </div>
-
-                {/* Row 2: stats */}
-                <div className="grid grid-cols-4 gap-3">
-                  <Stat label="WINS" value={String(r.wins)} color="var(--success)" icon={<TrendingUp size={12} />} />
-                  <Stat label="LOSSES" value={String(r.losses)} color="var(--danger)" icon={<TrendingDown size={12} />} />
-                  <Stat label="WIN RATE" value={`${(wr * 100).toFixed(1)}%`} color={wrColor} />
-                  <Stat label="AVG STRENGTH" value={r.avgStrength.toFixed(0)} color="var(--ink-2)" />
-                </div>
-              </div>
-            )
-          })}
         </div>
       )}
 
-      {/* Footer methodology */}
-      <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <p className="text-xs font-semibold mb-3" style={{ color: 'var(--ink-2)', letterSpacing: '0.06em' }}>DEMO v1 SIGNAL RULES (AUDITABLE)</p>
-        <div className="grid grid-cols-2 gap-2 text-xs" style={{ color: 'var(--subtle)' }}>
+      {/* Summary bar */}
+      {!loading && tokens.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
           {[
-            ['RSI(14)', 'Oversold (<30) → bullish bias; Overbought (>70) → bearish bias'],
-            ['EMA 20/50', 'Golden cross (20>50) → bullish; Death cross → bearish'],
-            ['MACD(12,26,9)', 'Positive histogram → bullish momentum; negative → bearish'],
-            ['Bollinger Bands', 'Price near lower band → oversold; near upper → overbought'],
-            ['Volume ratio', '>1.2× avg confirms move; <0.8× weakens signal'],
-            ['24h change', 'Positive → bullish tilt; negative → bearish tilt (0.5 weight)'],
-          ].map(([name, desc]) => (
-            <div key={name} className="flex gap-2">
-              <span className="font-semibold shrink-0" style={{ color: 'var(--ink-2)', minWidth: 80 }}>{name}</span>
-              <span>{desc}</span>
+            { label: 'Tokens tested', value: tokens.length.toString() },
+            { label: 'Total signals', value: totalWindows.toString() },
+            { label: 'Avg win rate', value: Math.round(avgWinRate * 100) + '%', color: avgWinRate >= 0.6 ? 'var(--success)' : avgWinRate >= 0.5 ? 'var(--gold)' : 'var(--danger)' },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl p-4 text-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <div className="text-2xl font-black" style={{ color: s.color ?? 'var(--ink)' }}>{s.value}</div>
+              <div className="text-[11px] mt-1" style={{ color: 'var(--subtle)' }}>{s.label}</div>
             </div>
           ))}
         </div>
-        <p className="text-xs mt-3" style={{ color: 'var(--subtle)', opacity: 0.7 }}>
-          Direction = majority vote across 6 indicators (equal weight, except 24h change and volume at 0.5). Target = spot ± 1× ATR(14). Confidence band = 1.5× ATR%, clamped 3–20%.
-        </p>
+      )}
+
+      {/* Token cards */}
+      {!loading && tokens.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {tokens.map(r => <TokenCard key={r.token} result={r} />)}
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="rounded-xl p-4 flex gap-2 text-sm" style={{ background: 'rgba(240,112,128,0.08)', border: '1px solid rgba(240,112,128,0.25)', color: 'var(--danger)' }}>
+          <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Methodology */}
+      <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <h3 className="text-sm font-bold mb-3" style={{ color: 'var(--ink)' }}>How to run this yourself</h3>
+        <div className="flex flex-col gap-3 text-sm" style={{ color: 'var(--ink-2)' }}>
+          <div>
+            <span className="font-semibold" style={{ color: 'var(--accent)' }}>1. Start the signal service:</span>
+            <pre className="mt-1 rounded-lg p-3 text-xs overflow-x-auto mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-2)' }}>bun run server</pre>
+          </div>
+          <div>
+            <span className="font-semibold" style={{ color: 'var(--accent)' }}>2. Hit the backtest endpoint:</span>
+            <pre className="mt-1 rounded-lg p-3 text-xs overflow-x-auto mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-2)' }}>
+{`# Summary (default):
+curl "http://localhost:3001/signal/backtest?token=BTC&limit=500"
+
+# With full per-trade breakdown:
+curl "http://localhost:3001/signal/backtest?token=BTC&limit=500&trades=true"
+
+# All tokens:
+for t in BTC ETH SOL ARB MATIC; do
+  curl -s "http://localhost:3001/signal/backtest?token=$t&limit=500"
+done`}
+            </pre>
+          </div>
+          <div>
+            <span className="font-semibold" style={{ color: 'var(--accent)' }}>3. What each metric means:</span>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {[
+                ['Directional accuracy', 'Price moved toward target before being stopped out by a full ATR in the opposite direction'],
+                ['Band hit rate', 'Price touched the 1.5×ATR confidence band within 6 forward candles (looser, higher)'],
+                ['Strong vs Weak', 'Win rate split at strengthScore=65 — tests whether the strength score predicts outcome'],
+                ['Avg forward return', 'Mean % price move in signal direction over the 6-candle evaluation window'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <span className="shrink-0 font-semibold text-[11px]" style={{ color: 'var(--ink-2)', minWidth: 140 }}>{k}:</span>
+                  <span className="text-[11px]" style={{ color: 'var(--muted)' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <span className="font-semibold" style={{ color: 'var(--accent)' }}>4. Verify the signal logic:</span>
+            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>All rules are in <code className="mono px-1 py-0.5 rounded" style={{ background: 'var(--surface-raised)' }}>server/signal.ts</code> · <code className="mono px-1 py-0.5 rounded" style={{ background: 'var(--surface-raised)' }}>computeSignal()</code> function, ~50 lines. Tests: <code className="mono px-1 py-0.5 rounded" style={{ background: 'var(--surface-raised)' }}>bun test server/signal.test.ts</code></p>
+          </div>
+        </div>
       </div>
-
-    </div>
-  )
-}
-
-function Stat({ label, value, color, icon }: { label: string; value: string; color: string; icon?: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <p className="text-[10px] font-semibold flex items-center gap-1" style={{ color: 'var(--subtle)', letterSpacing: '0.06em' }}>
-        {icon}{label}
-      </p>
-      <p className="display text-lg font-bold tabular-nums" style={{ color }}>{value}</p>
     </div>
   )
 }
