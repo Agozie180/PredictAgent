@@ -1,66 +1,71 @@
 /**
- * Live market price ticker — shown above the feed.
- * Pulls from the signal service /api/prices endpoint.
+ * Horizontal price ticker strip — shown just below the header.
+ * Compact single-line strip, not a card. Fast to scan.
  */
 import { useSpotPrices } from '../hooks/useSpotPrices'
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { TrendingUp, TrendingDown } from 'lucide-react'
+import { TokenIcon } from './TokenIcon'
 
 function formatPrice(p: number): string {
+  if (p >= 10000) return p.toLocaleString('en-US', { maximumFractionDigits: 0 })
   if (p >= 1000) return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   if (p >= 1) return p.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 4 })
   return p.toFixed(6)
 }
 
-function formatVol(v: number): string {
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`
-  return `$${v.toFixed(0)}`
-}
-
 export function MarketTicker() {
   const { prices, isLoading } = useSpotPrices()
 
-  if (isLoading && prices.length === 0) {
-    return (
-      <div className="rounded-xl px-4 py-3 flex items-center gap-2 text-xs" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--subtle)' }}>
-        <span className="animate-pulse">Loading live prices…</span>
-      </div>
-    )
-  }
-
-  if (prices.length === 0) return null
-
   return (
-    <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-      <div className="px-4 py-2 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-        <span className="text-[10px] font-semibold tracking-widest" style={{ color: 'var(--subtle)' }}>LIVE MARKET PRICES</span>
-        <span className="text-[10px]" style={{ color: 'var(--subtle)' }}>via Binance · updates every 60s</span>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x" style={{ '--tw-divide-opacity': 1 } as React.CSSProperties}>
-        {prices.map(p => {
-          const up = p.change24hPct >= 0
-          const neutral = Math.abs(p.change24hPct) < 0.05
-          const color = neutral ? 'var(--muted)' : up ? 'var(--success)' : 'var(--danger)'
-          return (
-            <div key={p.token} className="px-4 py-3 flex flex-col gap-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold" style={{ color: 'var(--ink-2)' }}>{p.token}</span>
-                <div className="flex items-center gap-0.5 text-[11px] font-semibold" style={{ color }}>
-                  {neutral ? <Minus size={11} /> : up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                  {up && !neutral ? '+' : ''}{p.change24hPct.toFixed(2)}%
+    <div
+      className="w-full overflow-x-auto"
+      style={{
+        background: 'rgba(8,15,26,0.7)',
+        borderBottom: '1px solid var(--border)',
+      }}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-0 min-w-max">
+          {/* Label */}
+          <div className="flex items-center gap-1.5 pr-4 mr-2 shrink-0" style={{ borderRight: '1px solid var(--border)' }}>
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ background: 'var(--success)' }} />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: 'var(--success)' }} />
+            </span>
+            <span className="text-[10px] font-semibold" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>LIVE</span>
+          </div>
+
+          {isLoading && prices.length === 0
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 px-4 py-2.5" style={{ borderRight: '1px solid var(--border)' }}>
+                  <div className="w-3 h-3 rounded-full animate-pulse" style={{ background: 'var(--border)' }} />
+                  <div className="w-14 h-3 rounded animate-pulse" style={{ background: 'var(--border)' }} />
+                  <div className="w-8 h-2.5 rounded animate-pulse" style={{ background: 'var(--border)' }} />
                 </div>
-              </div>
-              <span className="display text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>
-                ${formatPrice(p.price)}
-              </span>
-              {p.volume24h > 0 && (
-                <span className="text-[10px] tabular-nums" style={{ color: 'var(--subtle)' }}>
-                  Vol {formatVol(p.volume24h)}
-                </span>
-              )}
-            </div>
-          )
-        })}
+              ))
+            : prices.map((p, idx) => {
+                const up = p.change24hPct > 0
+                const neutral = Math.abs(p.change24hPct) < 0.05
+                const changeColor = neutral ? 'var(--subtle)' : up ? 'var(--success)' : 'var(--danger)'
+                return (
+                  <div
+                    key={p.token}
+                    className="flex items-center gap-2.5 px-4 py-2.5"
+                    style={{ borderRight: idx < prices.length - 1 ? '1px solid var(--border)' : 'none' }}
+                  >
+                    <TokenIcon token={p.token} size={14} style={{ borderRadius: '50%', flexShrink: 0 }} />
+                    <span className="text-xs font-bold" style={{ color: 'var(--ink-2)' }}>{p.token}</span>
+                    <span className="display text-xs font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>
+                      ${formatPrice(p.price)}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-[11px] font-semibold tabular-nums" style={{ color: changeColor }}>
+                      {!neutral && (up ? <TrendingUp size={10} /> : <TrendingDown size={10} />)}
+                      {up && !neutral ? '+' : ''}{p.change24hPct.toFixed(2)}%
+                    </span>
+                  </div>
+                )
+              })}
+        </div>
       </div>
     </div>
   )

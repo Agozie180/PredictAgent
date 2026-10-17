@@ -1,13 +1,53 @@
-import { useState, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useContractInfo, useSellerReputation, useMultipleRequests, type SignalRequest } from '../hooks/usePredictAgent'
 import { formatUsdc, formatAddress, STATUS_LABELS, STATUS_COLORS, STATUS_BG, formatTimestamp, directionLabel, SUPPORTED_TOKENS } from '../lib/utils'
 import { SignalPreview } from './SignalPreview'
-import { ExternalLink, TrendingUp, TrendingDown, Loader2, Activity } from 'lucide-react'
+import { ExternalLink, TrendingUp, TrendingDown, Activity, ChevronRight, Zap, Award } from 'lucide-react'
+import { TokenIcon } from './TokenIcon'
 
-function StatusBadge({ status }: { status: number }) {
+/** Returns whether the window is currently open, stable from first render. */
+function useIsOpen(tsOpen: number, tsClose: number): boolean {
+  const [now, setNow] = useState(0)
+  const initialized = useRef(false)
+  useEffect(() => {
+    if (!initialized.current) { initialized.current = true; setNow(Date.now()) }
+  }, [])
+  return now > 0 && now >= tsOpen && now < tsClose
+}
+
+function SkeletonCard() {
+  return (
+    <div className="rounded-2xl p-5 flex flex-col gap-3 animate-pulse" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <div className="flex justify-between">
+        <div className="flex gap-2 items-center">
+          <div className="w-8 h-8 rounded-lg" style={{ background: 'var(--surface-strong)' }} />
+          <div className="w-16 h-4 rounded" style={{ background: 'var(--surface-strong)' }} />
+        </div>
+        <div className="w-20 h-5 rounded-lg" style={{ background: 'var(--surface-strong)' }} />
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {[0,1,2].map(i => <div key={i} className="h-10 rounded-xl" style={{ background: 'var(--surface-muted)' }} />)}
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
+  return (
+    <div className="rounded-2xl p-5 flex flex-col gap-1" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <p className="text-[10px] font-semibold" style={{ color: 'var(--subtle)', letterSpacing: '0.09em' }}>{label}</p>
+      <p className="display text-2xl font-bold tabular-nums" style={{ color: accent ? 'var(--accent)' : 'var(--ink)', letterSpacing: '-0.04em' }}>
+        {value}
+      </p>
+      {sub && <p className="text-xs" style={{ color: 'var(--subtle)' }}>{sub}</p>}
+    </div>
+  )
+}
+
+function StatusPip({ status }: { status: number }) {
   return (
     <span
-      className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${STATUS_BG[status] ?? ''} ${STATUS_COLORS[status] ?? ''}`}
+      className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_BG[status] ?? ''} ${STATUS_COLORS[status] ?? ''}`}
       style={{ letterSpacing: '0.06em' }}
     >
       {STATUS_LABELS[status] ?? 'UNKNOWN'}
@@ -15,114 +55,91 @@ function StatusBadge({ status }: { status: number }) {
   )
 }
 
-function RequestRow({ req }: { req: SignalRequest }) {
+function RequestCard({ req }: { req: SignalRequest }) {
   const ts = Number(req.windowOpen) * 1000
   const te = Number(req.windowClose) * 1000
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const now = useMemo(() => Date.now(), [])
-  const isOpen = now >= ts && now < te
-  const isClosed = now >= te
+  const isOpen = useIsOpen(ts, te)
   const dirLabel = req.revealedDirection !== '0x0000000000000000000000000000000000000000000000000000000000000000'
     ? directionLabel(req.revealedDirection)
     : null
+  const isBull = dirLabel === 'BULLISH'
 
   return (
     <div
-      className="rounded-xl p-4 flex flex-col gap-3 transition-all hover:border-opacity-40"
+      className="rounded-2xl p-5 flex flex-col gap-4 transition-all hover:border-opacity-60"
       style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
     >
-      <div className="flex items-start justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="display text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>
-            #{req.requestId.toString()}
-          </span>
-          <span
-            className="text-xs font-bold px-2 py-0.5 rounded"
-            style={{ background: 'rgba(172,198,233,0.12)', color: 'var(--accent)' }}
-          >
-            {req.tokenSymbol}
-          </span>
-          {isOpen && (
-            <span className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: 'var(--success)', letterSpacing: '0.04em' }}>
-              <Activity size={10} />
-              LIVE
-            </span>
-          )}
+      {/* Row 1 */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <TokenIcon token={req.tokenSymbol} size={22} style={{ borderRadius: 6 }} />
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="display text-base font-bold" style={{ color: 'var(--ink)' }}>{req.tokenSymbol}</span>
+              <span className="mono text-xs" style={{ color: 'var(--subtle)' }}>#{req.requestId.toString()}</span>
+              {isOpen && (
+                <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: 'var(--success)', letterSpacing: '0.05em' }}>
+                  <Activity size={9} /> LIVE
+                </span>
+              )}
+            </div>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>
+              {formatTimestamp(req.windowOpen)} → {formatTimestamp(req.windowClose)}
+            </p>
+          </div>
         </div>
-        <StatusBadge status={req.status} />
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs" style={{ color: 'var(--subtle)' }}>
-        <div>
-          <p className="mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em', fontSize: 10 }}>WINDOW OPEN</p>
-          <p className="tabular-nums" style={{ color: 'var(--muted)' }}>{formatTimestamp(req.windowOpen)}</p>
-        </div>
-        <div>
-          <p className="mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em', fontSize: 10 }}>WINDOW CLOSE</p>
-          <p className="tabular-nums" style={{ color: 'var(--muted)' }}>
-            {isClosed ? <span style={{ color: 'var(--subtle)' }}>Closed</span> : formatTimestamp(req.windowClose)}
-          </p>
-        </div>
-        <div>
-          <p className="mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em', fontSize: 10 }}>FEE PAID</p>
-          <p className="tabular-nums font-semibold" style={{ color: 'var(--ink-2)' }}>
-            ${formatUsdc(req.feePaid)} USDC
-          </p>
-        </div>
-        <div>
-          <p className="mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em', fontSize: 10 }}>BUYER</p>
-          <p className="mono tabular-nums" style={{ color: 'var(--muted)' }}>
-            {formatAddress(req.buyer)}
-          </p>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs font-semibold tabular-nums" style={{ color: 'var(--ink-2)' }}>${formatUsdc(req.feePaid)}</span>
+          <StatusPip status={req.status} />
         </div>
       </div>
 
       {/* Revealed signal */}
       {req.status >= 2 && dirLabel && (
         <div
-          className="rounded-lg p-3 flex items-center gap-3"
-          style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}
+          className="rounded-xl px-4 py-3 flex items-center gap-4"
+          style={{
+            background: isBull ? 'var(--success-dim)' : 'var(--danger-dim)',
+            border: `1px solid ${isBull ? 'rgba(110,201,138,0.2)' : 'rgba(240,112,128,0.2)'}`,
+          }}
         >
-          <div className={`shrink-0 ${dirLabel === 'BULLISH' ? 'text-green-400' : 'text-red-400'}`}>
-            {dirLabel === 'BULLISH' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+          <div style={{ color: isBull ? 'var(--success)' : 'var(--danger)' }}>
+            {isBull ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
           </div>
-          <div className="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+          <div className="flex-1 grid grid-cols-3 gap-3 text-xs">
             <div>
-              <p style={{ color: 'var(--subtle)', letterSpacing: '0.05em', fontSize: 10 }}>DIRECTION</p>
-              <p className="font-semibold" style={{ color: dirLabel === 'BULLISH' ? 'var(--success)' : 'var(--danger)' }}>{dirLabel}</p>
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em' }}>DIRECTION</p>
+              <p className="font-bold" style={{ color: isBull ? 'var(--success)' : 'var(--danger)' }}>{dirLabel}</p>
             </div>
             <div>
-              <p style={{ color: 'var(--subtle)', letterSpacing: '0.05em', fontSize: 10 }}>TARGET PRICE</p>
-              <p className="tabular-nums font-semibold" style={{ color: 'var(--ink-2)' }}>
-                ${formatUsdc(req.revealedTargetPrice)}
-              </p>
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em' }}>TARGET</p>
+              <p className="tabular-nums font-semibold" style={{ color: 'var(--ink-2)' }}>${formatUsdc(req.revealedTargetPrice)}</p>
             </div>
             <div>
-              <p style={{ color: 'var(--subtle)', letterSpacing: '0.05em', fontSize: 10 }}>CONFIDENCE ±</p>
-              <p className="tabular-nums font-semibold" style={{ color: 'var(--ink-2)' }}>
-                {(Number(req.revealedConfidenceBandBps) / 100).toFixed(2)}%
-              </p>
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em' }}>CONFIDENCE ±</p>
+              <p className="tabular-nums font-semibold" style={{ color: 'var(--ink-2)' }}>{(Number(req.revealedConfidenceBandBps) / 100).toFixed(2)}%</p>
             </div>
           </div>
           {req.outcomeRecorded && (
             <div
-              className="shrink-0 text-[11px] font-bold px-2 py-1 rounded"
+              className="text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0"
               style={{
-                background: req.outcomeCorrect ? 'rgba(141,216,159,0.15)' : 'rgba(232,109,122,0.15)',
+                background: req.outcomeCorrect ? 'var(--success-dim)' : 'var(--danger-dim)',
                 color: req.outcomeCorrect ? 'var(--success)' : 'var(--danger)',
+                border: `1px solid ${req.outcomeCorrect ? 'rgba(110,201,138,0.3)' : 'rgba(240,112,128,0.3)'}`,
               }}
             >
-              {req.outcomeCorrect ? 'CORRECT' : 'INCORRECT'}
+              {req.outcomeCorrect ? 'WIN' : 'MISS'}
             </div>
           )}
         </div>
       )}
 
-      {/* Commit hash */}
+      {/* Commit hash preview */}
       {req.commitHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
-        <div className="text-xs flex items-center gap-2" style={{ color: 'var(--subtle)' }}>
-          <span style={{ letterSpacing: '0.04em', fontSize: 10 }}>COMMIT HASH</span>
-          <span className="mono" style={{ color: 'var(--muted)' }}>{req.commitHash.slice(0, 18)}…</span>
+        <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--subtle)' }}>
+          <span style={{ letterSpacing: '0.05em', fontSize: 10 }}>COMMIT</span>
+          <span className="mono" style={{ color: 'var(--muted)' }}>{req.commitHash.slice(0, 20)}…</span>
         </div>
       )}
     </div>
@@ -135,175 +152,172 @@ export function SignalFeed({ onBuySignal }: { onBuySignal: () => void }) {
   const { settled, refunded, isLoading: repLoading } = useSellerReputation(sellerAddr)
   const requestCount = Number(nextRequestId) - 1
   const { requests, isLoading: reqsLoading } = useMultipleRequests(Math.min(requestCount, 20))
-  // Win rate = settled / requestCount (all requests ever made, not just resolved ones)
-  // refundedCount[sellerAddr] is always 0 — refunds go to buyers, not the seller.
-  // Use requestCount as denominator so the number reflects actual delivery rate.
   const accuracy = requestCount > 0 ? Math.round((Number(settled) / requestCount) * 100) : null
 
   if (infoLoading) {
     return (
-      <div className="flex flex-col gap-6">
-        {/* Stat skeletons */}
+      <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[0,1,2,3].map(i => (
-            <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-              <div className="h-2 w-16 rounded mb-3 animate-pulse" style={{ background: 'var(--border)' }} />
-              <div className="h-7 w-12 rounded animate-pulse" style={{ background: 'var(--surface-strong)' }} />
+            <div key={i} className="rounded-2xl p-5 animate-pulse" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <div className="h-2.5 w-16 rounded mb-3" style={{ background: 'var(--border)' }} />
+              <div className="h-8 w-20 rounded" style={{ background: 'var(--surface-strong)' }} />
             </div>
           ))}
         </div>
-        {/* Card skeletons */}
-        {[0,1,2].map(i => (
-          <div key={i} className="rounded-xl p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            <div className="flex justify-between">
-              <div className="h-4 w-24 rounded animate-pulse" style={{ background: 'var(--surface-strong)' }} />
-              <div className="h-4 w-16 rounded animate-pulse" style={{ background: 'var(--border)' }} />
-            </div>
-            <div className="grid grid-cols-4 gap-3">
-              {[0,1,2,3].map(j => (
-                <div key={j} className="h-8 rounded animate-pulse" style={{ background: 'var(--surface-muted)' }} />
-              ))}
-            </div>
-          </div>
-        ))}
+        {[0,1,2].map(i => <SkeletonCard key={i} />)}
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Stats row */}
+      {/* ── Stats ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'SIGNAL FEE', value: `$${formatUsdc(signalFeeUsdc)} USDC`, accent: true },
-          { label: 'TOTAL REQUESTS', value: requestCount.toString(), accent: false },
-          { label: 'SETTLED', value: settled.toString(), accent: false },
-          { label: 'WIN RATE', value: accuracy !== null ? `${accuracy}%` : '—', accent: accuracy !== null && accuracy >= 60 },
-        ].map(stat => (
-          <div
-            key={stat.label}
-            className="rounded-xl p-4"
-            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-          >
-            <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
-              {stat.label}
-            </p>
-            <p
-              className="display text-xl font-semibold tabular-nums"
-              style={{ color: stat.accent ? 'var(--accent)' : 'var(--ink)' }}
-            >
-              {stat.value}
-            </p>
-          </div>
-        ))}
+        <StatCard label="SIGNAL FEE" value={`$${formatUsdc(signalFeeUsdc)}`} sub="per request · USDC" accent />
+        <StatCard label="TOTAL REQUESTS" value={requestCount.toString()} sub="on-chain" />
+        <StatCard label="SETTLED" value={settled.toString()} sub="paid out" />
+        <StatCard
+          label="WIN RATE"
+          value={accuracy !== null ? `${accuracy}%` : '—'}
+          sub={accuracy !== null ? 'delivery rate' : 'no data yet'}
+          accent={accuracy !== null && accuracy >= 60}
+        />
       </div>
 
-      {/* Seller reputation */}
+      {/* ── Seller agent ───────────────────────────────────────────── */}
       {sellerAddr && !repLoading && (
         <div
-          className="rounded-xl p-4 flex items-center gap-4 flex-wrap"
+          className="rounded-2xl px-5 py-4 flex items-center gap-4 flex-wrap"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
         >
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: 'var(--accent-dim)' }}
+          >
+            <Award size={16} style={{ color: 'var(--accent)' }} />
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-semibold mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
-              SELLER AGENT
-            </p>
+            <p className="text-[10px] font-semibold mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>SELLER AGENT</p>
             <p className="mono text-sm" style={{ color: 'var(--ink-2)' }}>{formatAddress(sellerAddr)}</p>
           </div>
           <div className="flex items-center gap-4 text-xs">
-            <div>
-              <p style={{ color: 'var(--subtle)', letterSpacing: '0.06em', fontSize: 10 }}>SETTLED</p>
-              <p className="tabular-nums font-semibold" style={{ color: 'var(--success)' }}>{settled.toString()}</p>
+            <div className="text-center">
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em' }}>SETTLED</p>
+              <p className="tabular-nums font-bold" style={{ color: 'var(--success)' }}>{settled.toString()}</p>
             </div>
-            <div>
-              <p style={{ color: 'var(--subtle)', letterSpacing: '0.06em', fontSize: 10 }}>REFUNDED</p>
-              <p className="tabular-nums font-semibold" style={{ color: 'var(--danger)' }}>{refunded.toString()}</p>
+            <div className="text-center">
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: 'var(--subtle)', letterSpacing: '0.06em' }}>REFUNDED</p>
+              <p className="tabular-nums font-bold" style={{ color: 'var(--danger)' }}>{refunded.toString()}</p>
             </div>
           </div>
           <a
             href={`https://explorer.arc.io/address/${sellerAddr}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-70"
+            className="flex items-center gap-1 text-xs transition-opacity hover:opacity-70"
             style={{ color: 'var(--accent)' }}
           >
-            Explorer <ExternalLink size={12} />
+            Explorer <ExternalLink size={11} />
           </a>
         </div>
       )}
 
-      {/* Pause banner */}
+      {/* ── Pause ──────────────────────────────────────────────────── */}
       {paused && (
         <div
           className="rounded-xl px-4 py-3 text-sm font-semibold"
-          style={{ background: 'rgba(232,109,122,0.12)', border: '1px solid rgba(232,109,122,0.3)', color: 'var(--danger)' }}
+          style={{ background: 'var(--danger-dim)', border: '1px solid rgba(240,112,128,0.25)', color: 'var(--danger)' }}
         >
-          Marketplace is currently paused — new requests are not being accepted.
+          Marketplace paused — new requests are not being accepted.
         </div>
       )}
 
-      {/* Buy signal CTA */}
+      {/* ── Buy CTA ────────────────────────────────────────────────── */}
       {!paused && (
         <button
           onClick={onBuySignal}
-          className="w-full py-3.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.99]"
-          style={{ background: 'var(--accent)', color: '#0d1b2f' }}
+          className="w-full py-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.99]"
+          style={{ background: 'var(--accent)', color: '#080f1a', letterSpacing: '0.01em' }}
         >
+          <Zap size={15} />
           Buy a Signal — ${formatUsdc(signalFeeUsdc)} USDC
+          <ChevronRight size={15} />
         </button>
       )}
 
-      {/* Signal preview panel */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
+      {/* ── Signal preview ─────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-3">
           <h2 className="display text-sm font-semibold" style={{ color: 'var(--ink-2)', letterSpacing: '-0.01em' }}>
             Current Signal Preview
           </h2>
           <div className="flex gap-1">
-            {SUPPORTED_TOKENS.map(t => (
-              <button
-                key={t}
-                onClick={() => setPreviewToken(t)}
-                className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
-                style={{
-                  background: previewToken === t ? 'var(--accent)' : 'var(--surface)',
-                  color: previewToken === t ? '#0d1b2f' : 'var(--muted)',
-                  border: `1px solid ${previewToken === t ? 'var(--accent)' : 'var(--border)'}`,
-                }}
-              >
-                {t}
-              </button>
-            ))}
+            {SUPPORTED_TOKENS.map(t => {
+              const active = previewToken === t
+              return (
+                <button
+                  key={t}
+                  onClick={() => setPreviewToken(t)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
+                  style={{
+                    background: active ? 'var(--accent-dim)' : 'transparent',
+                    color: active ? 'var(--accent)' : 'var(--subtle)',
+                    border: `1px solid ${active ? 'rgba(172,198,233,0.3)' : 'transparent'}`,
+                  }}
+                >
+                  <TokenIcon token={t} size={12} />
+                  {t}
+                </button>
+              )
+            })}
           </div>
         </div>
         <SignalPreview token={previewToken} />
       </div>
 
-      {/* Request feed */}
+      {/* ── Request feed ───────────────────────────────────────────── */}
       <div>
         <h2 className="display text-sm font-semibold mb-3" style={{ color: 'var(--ink-2)', letterSpacing: '-0.01em' }}>
           Recent Requests
         </h2>
+
         {reqsLoading && requestCount > 0 && (
-          <div className="flex items-center gap-2 text-sm py-4" style={{ color: 'var(--subtle)' }}>
-            <Loader2 size={16} className="animate-spin" />
-            Loading requests…
+          <div className="flex flex-col gap-3">
+            {[0,1,2].map(i => <SkeletonCard key={i} />)}
           </div>
         )}
+
         {requestCount === 0 && !reqsLoading && (
           <div
-            className="rounded-xl py-10 text-center text-sm"
-            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--subtle)' }}
+            className="rounded-2xl py-16 text-center flex flex-col items-center gap-3"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
           >
-            No signal requests yet. Be the first to buy a signal.
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+              <BarChart2Icon />
+            </div>
+            <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>No signal requests yet</p>
+            <p className="text-xs" style={{ color: 'var(--subtle)' }}>Be the first to buy a signal and start the feed.</p>
+            <button
+              onClick={onBuySignal}
+              className="mt-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+              style={{ background: 'var(--accent)', color: '#080f1a' }}
+            >
+              Buy first signal
+            </button>
           </div>
         )}
+
         <div className="flex flex-col gap-3">
           {[...requests].reverse().map(req => (
-            <RequestRow key={req.requestId.toString()} req={req} />
+            <RequestCard key={req.requestId.toString()} req={req} />
           ))}
         </div>
       </div>
     </div>
   )
+}
+
+function BarChart2Icon() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
 }

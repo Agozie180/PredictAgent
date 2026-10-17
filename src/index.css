@@ -4,21 +4,26 @@
 
 /* Arc Dark — trading / oracle / live-data mode */
 :root {
-  --bg: #0d1b2f;
-  --bg-gradient: linear-gradient(180deg, #0d1b2f 0%, #0d1b2f 58%, #122d45 100%);
-  --surface: rgba(255, 255, 255, 0.07);
-  --surface-strong: rgba(255, 255, 255, 0.11);
-  --surface-muted: #1f2f44;
-  --ink: #f9faf3;
-  --ink-2: #e3ecf9;
-  --muted: #cbd5e1;
-  --subtle: #94a3b8;
-  --border: rgba(255, 255, 255, 0.12);
-  --border-strong: rgba(203, 219, 242, 0.55);
+  --bg: #080f1a;
+  --bg-gradient: linear-gradient(160deg, #080f1a 0%, #0b1628 55%, #0d1f38 100%);
+  --surface: rgba(255, 255, 255, 0.055);
+  --surface-strong: rgba(255, 255, 255, 0.10);
+  --surface-muted: rgba(255, 255, 255, 0.03);
+  --surface-raised: rgba(255, 255, 255, 0.08);
+  --ink: #f0f4fc;
+  --ink-2: #c8d8f0;
+  --muted: #8fa8c8;
+  --subtle: #526070;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(172, 198, 233, 0.30);
   --accent: #acc6e9;
   --accent-hover: #cbdbf2;
-  --success: #8dd89f;
-  --danger: #e86d7a;
+  --accent-dim: rgba(172, 198, 233, 0.12);
+  --success: #6ec98a;
+  --success-dim: rgba(110, 201, 138, 0.12);
+  --danger: #f07080;
+  --danger-dim: rgba(240, 112, 128, 0.10);
+  --gold: #e8b96a;
 }
 
 * {
@@ -31,6 +36,7 @@ body {
   min-height: 100dvh;
   background: var(--bg-gradient);
   color: var(--ink);
+  -webkit-font-smoothing: antialiased;
 }
 
 .display {
@@ -42,3 +48,40 @@ body {
   font-family: 'JetBrains Mono', Menlo, monospace;
 }
 
+/* Subtle grid texture on body */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(172,198,233,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(172,198,233,0.015) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* Glass card */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+}
+
+.card-raised {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }

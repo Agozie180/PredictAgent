@@ -1,23 +1,22 @@
-import { AlertTriangle } from 'lucide-react'
+import { Info } from 'lucide-react'
 
 export function Disclaimer() {
   return (
     <div
-      className="w-full rounded-xl px-4 py-3 flex items-start gap-3 text-sm"
+      className="flex items-start gap-2.5 rounded-xl px-4 py-3 mb-5 text-xs"
       style={{
-        background: 'rgba(232,109,122,0.08)',
-        border: '1px solid rgba(232,109,122,0.2)',
+        background: 'rgba(172,198,233,0.05)',
+        border: '1px solid rgba(172,198,233,0.12)',
         color: 'var(--muted)',
       }}
     >
-      <AlertTriangle size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--danger)' }} />
-      <p className="leading-relaxed" style={{ color: 'var(--muted)' }}>
-        <strong style={{ color: 'var(--ink-2)' }}>Disclaimer:</strong>{' '}
-        Signals are for informational purposes only and do not constitute financial advice. Past results do not
-        guarantee future outcomes. This is a demo marketplace — signal logic is clearly labelled as a demo
-        version and has not been independently validated. Always do your own research before making financial
-        decisions.
-      </p>
+      <Info size={13} className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
+      <span>
+        <strong style={{ color: 'var(--ink-2)' }}>DEMO v1 — Informational only.</strong>{' '}
+        Signals are not financial advice. Past results do not guarantee future outcomes.
+        Signal logic uses public exchange data and is auditable in{' '}
+        <span className="mono">server/signal.ts</span>.
+      </span>
     </div>
   )
 }
