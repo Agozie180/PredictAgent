@@ -74,7 +74,7 @@ jobs:
           echo "Fee (6-dec):   ${{ github.event.inputs.signal_fee_usdc }}"
           echo "Owner:         ${{ secrets.OWNER_ADDRESS }}"
           echo "Seller:        ${{ secrets.SELLER_ADDRESS }}"
-          echo "=== Would deploy to Arc mainnet (RPC: https://rpc.arc.io) ==="
+          echo "=== Would deploy to Arc mainnet (RPC: https://rpc.mainnet.arc.io) ==="
           forge inspect ${{ github.event.inputs.contract }} abi | head -5
           echo "✅ Dry run complete — re-run with dry_run=false to broadcast"
 
@@ -90,7 +90,7 @@ jobs:
         run: |
           echo "Deploying ${CONTRACT_NAME} to Arc mainnet..."
           set +e
-          OUTPUT=$(forge create "contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}" --rpc-url https://rpc.arc.io --private-key "${DEPLOYER_PRIVATE_KEY}" --constructor-args "${SELLER_ADDRESS}" "${SIGNAL_FEE}" "${OWNER_ADDRESS}" --legacy 2>&1)
+          OUTPUT=$(forge create "contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}" --rpc-url https://rpc.mainnet.arc.io --private-key "${DEPLOYER_PRIVATE_KEY}" --constructor-args "${SELLER_ADDRESS}" "${SIGNAL_FEE}" "${OWNER_ADDRESS}" --legacy 2>&1)
           EXIT_CODE=$?
           set -e
           echo "$OUTPUT"
