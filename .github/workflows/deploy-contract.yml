@@ -91,7 +91,7 @@ jobs:
           echo "Deploying ${CONTRACT_NAME} to Arc mainnet..."
           set +e
           echo "Args: SELLER=${SELLER_ADDRESS} FEE=${SIGNAL_FEE} OWNER=${OWNER_ADDRESS}"
-          OUTPUT=$(forge create "contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}" --rpc-url https://rpc.mainnet.arc.io --private-key "${DEPLOYER_PRIVATE_KEY}" --constructor-args "${SELLER_ADDRESS}" "${SIGNAL_FEE}" "${OWNER_ADDRESS}" --broadcast 2>&1)
+          OUTPUT=$(forge create "contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}" --rpc-url https://rpc.mainnet.arc.io --private-key "${DEPLOYER_PRIVATE_KEY}" --broadcast --constructor-args "${SELLER_ADDRESS}" "${SIGNAL_FEE}" "${OWNER_ADDRESS}" 2>&1)
           EXIT_CODE=$?
           set -e
           echo "$OUTPUT"
