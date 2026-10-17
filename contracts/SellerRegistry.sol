@@ -113,6 +113,13 @@ contract SellerRegistry is Ownable, ReentrancyGuard {
     event Paused(address by);
     event Unpaused(address by);
 
+    // ── Constructor ───────────────────────────────────────────────────────────
+
+    constructor(address _initialOwner) Ownable(_initialOwner) {
+        if (_initialOwner == address(0)) revert SR__InvalidAddress();
+        nextRequestId = 1;
+    }
+
     // ── State ─────────────────────────────────────────────────────────────────
 
     mapping(address => SellerProfile) public sellers;
