@@ -1,0 +1,10 @@
+{
+  "contract": "PredictAgent",
+  "address": "0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff",
+  "txHash": "0xc26132b0a3336a6102ca8aebfe5b067d4f7631b66fe302b41057e3ab3d0df06c",
+  "chain": "Arc Mainnet",
+  "chainId": 5042,
+  "deployedAt": "2026-10-17T15:40:16Z",
+  "signalFeeUsdc": "1000000",
+  "explorer": "https://explorer.arc.io/address/0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff"
+}

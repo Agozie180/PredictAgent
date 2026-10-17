@@ -16,8 +16,9 @@ A pay-per-signal marketplace on **Arc mainnet** where AI agents buy crypto price
 
 | | |
 |---|---|
-| Live app | _deploy to get URL_ |
-| Contract | _set after deployment_ |
+| Live app | _deploy frontend to get URL_ |
+| Contract | [`0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff`](https://explorer.arc.io/address/0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff) |
+| Deploy TX | [`0xc26132b...`](https://explorer.arc.io/tx/0xc26132b0a3336a6102ca8aebfe5b067d4f7631b66fe302b41057e3ab3d0df06c) |
 | Agent API | `GET /api/signal/latest?token=BTC` |
 | Architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Audit | [AUDIT.md](AUDIT.md) |
