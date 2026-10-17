@@ -81,30 +81,33 @@ jobs:
       - name: Deploy contract
         if: ${{ github.event.inputs.dry_run == 'false' }}
         id: deploy
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          SELLER_ADDRESS: ${{ secrets.SELLER_ADDRESS }}
+          OWNER_ADDRESS: ${{ secrets.OWNER_ADDRESS }}
+          CONTRACT_NAME: ${{ github.event.inputs.contract }}
+          SIGNAL_FEE: ${{ github.event.inputs.signal_fee_usdc }}
         run: |
-          echo "Deploying ${{ github.event.inputs.contract }} to Arc mainnet..."
-          OUTPUT=$(forge create \
-            contracts/${{ github.event.inputs.contract }}.sol:${{ github.event.inputs.contract }} \
-            --rpc-url https://rpc.arc.io \
-            --private-key ${{ secrets.DEPLOYER_PRIVATE_KEY }} \
-            --constructor-args \
-              ${{ secrets.SELLER_ADDRESS }} \
-              ${{ github.event.inputs.signal_fee_usdc }} \
-              ${{ secrets.OWNER_ADDRESS }} \
-            --legacy \
-            2>&1)
+          echo "Deploying ${CONTRACT_NAME} to Arc mainnet..."
+          set +e
+          OUTPUT=$(forge create "contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}" --rpc-url https://rpc.arc.io --private-key "${DEPLOYER_PRIVATE_KEY}" --constructor-args "${SELLER_ADDRESS}" "${SIGNAL_FEE}" "${OWNER_ADDRESS}" --legacy 2>&1)
+          EXIT_CODE=$?
+          set -e
           echo "$OUTPUT"
-          # Extract deployed address
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ forge create failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
           CONTRACT_ADDRESS=$(echo "$OUTPUT" | grep "Deployed to:" | awk '{print $3}')
           TX_HASH=$(echo "$OUTPUT" | grep "Transaction hash:" | awk '{print $3}')
           if [ -z "$CONTRACT_ADDRESS" ]; then
-            echo "❌ Could not extract contract address from forge output"
+            echo "❌ Could not extract contract address — forge output above"
             exit 1
           fi
-          echo "contract_address=$CONTRACT_ADDRESS" >> $GITHUB_OUTPUT
-          echo "tx_hash=$TX_HASH" >> $GITHUB_OUTPUT
-          echo "✅ Deployed: $CONTRACT_ADDRESS"
-          echo "🔗 TX: https://explorer.arc.io/tx/$TX_HASH"
+          echo "contract_address=${CONTRACT_ADDRESS}" >> $GITHUB_OUTPUT
+          echo "tx_hash=${TX_HASH}" >> $GITHUB_OUTPUT
+          echo "✅ Deployed: ${CONTRACT_ADDRESS}"
+          echo "TX: https://explorer.arc.io/tx/${TX_HASH}"
 
       - name: Write deployment record
         if: ${{ github.event.inputs.dry_run == 'false' }}
