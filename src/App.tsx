@@ -7,12 +7,14 @@ import { MarketTicker } from './components/MarketTicker'
 import { SignalFeed } from './components/SignalFeed'
 import { BuySignal } from './components/BuySignal'
 import { RequestDetail } from './components/RequestDetail'
-import { BarChart2, ShoppingCart, Search, Zap } from 'lucide-react'
+import { BacktestPanel } from './components/BacktestPanel'
+import { BarChart2, ShoppingCart, Search, Zap, FlaskConical } from 'lucide-react'
 
-type View = 'feed' | 'buy' | 'detail'
+type View = 'feed' | 'buy' | 'detail' | 'backtest'
 
 const TABS = [
   { id: 'feed' as View, label: 'Signal Feed', icon: BarChart2 },
+  { id: 'backtest' as View, label: 'Backtest', icon: FlaskConical },
   { id: 'buy'  as View, label: 'Buy Signal',  icon: ShoppingCart },
   { id: 'detail' as View, label: 'Track Request', icon: Search },
 ]
@@ -107,6 +109,9 @@ export default function App() {
                   onBack={() => navigate('feed')}
                   initialRequestId={detailRequestId}
                 />
+              )}
+              {view === 'backtest' && (
+                <BacktestPanel />
               )}
             </main>
           </div>

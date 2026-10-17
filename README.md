@@ -198,6 +198,20 @@ See [server/README.md](server/README.md) for full agent integration guide.
 
 ---
 
+## Backtest Results — DEMO v1 (in-sample, run 2026-10-17)
+
+> **Retrospective in-sample results only. Look-ahead bias applies. Do NOT use for investment decisions. Not financial advice.**
+
+| Token | Windows | Win Rate | Avg Strength | Method |
+|---|---|---|---|---|
+| BTC | 24 | 100% | 73/100 | 200 candles × 1h, sliding window |
+| ETH | 24 | 100% | 73/100 | 200 candles × 1h, sliding window |
+| SOL | 24 | 100% | 74/100 | 200 candles × 1h, sliding window |
+| ARB | 24 | 100% | 75/100 | 200 candles × 1h, sliding window |
+| MATIC | — | — | — | CoinGecko OHLC unavailable (paid tier required) |
+
+**Why 100%?** The confidence band is 1.5× ATR(14) of current price (≈ 3–20% wide). Over a 6-candle forward window, price almost always touches a band that wide — this measures ATR sizing consistency, not directional edge. A meaningful evaluation requires held-out data and a tighter band. Run live: `GET /api/signal/backtest?token=BTC&limit=200`
+
 ## Signal indicators (DEMO v1)
 
 Six indicators, majority vote decides direction:
