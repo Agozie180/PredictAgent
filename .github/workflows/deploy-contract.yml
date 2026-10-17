@@ -91,7 +91,7 @@ jobs:
               ${{ secrets.SELLER_ADDRESS }} \
               ${{ github.event.inputs.signal_fee_usdc }} \
               ${{ secrets.OWNER_ADDRESS }} \
-            --broadcast \
+            --legacy \
             2>&1)
           echo "$OUTPUT"
           # Extract deployed address
