@@ -20,7 +20,7 @@ import { join } from 'node:path'
 import { fetchCandles, fetchSpotPrices, SUPPORTED_TOKENS, type SpotPrice } from './marketData'
 import { computeSignal, computeCommitHash, stringToBytes32, backtestSignal, type SignalOutput } from './signal'
 
-const PORT = 3001
+const PORT = parseInt(process.env['PORT'] ?? '3001', 10)
 const STORE_PATH = join(import.meta.dir, '.signal-store.json')
 const SIGNAL_CACHE_TTL_MS = 10 * 60 * 1000  // 10 min
 

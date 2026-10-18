@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: predictagent-signal-service
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health
+    autoDeploy: true
