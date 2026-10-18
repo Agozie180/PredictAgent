@@ -1,10 +1,10 @@
-FROM oven/bun:1.1-slim
+FROM oven/bun:1.2-slim
 
 WORKDIR /app
 
 # Copy only what the signal service needs
-COPY package.json bun.lock* ./
-RUN bun install --production --frozen-lockfile
+COPY package.json ./
+RUN bun install --production
 
 COPY server/ ./server/
 
