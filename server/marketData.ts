@@ -98,13 +98,14 @@ export interface SpotPrice {
 
 // ── Candle fetch ──────────────────────────────────────────────────────────────
 
-export async function fetchCandles(token: string, limit = 60): Promise<Candle[]> {
+/** intervalMinutes: 60=1h (default), 240=4h, 720=12h, 1440=24h */
+export async function fetchCandles(token: string, limit = 60, intervalMinutes = 60): Promise<Candle[]> {
   const t = token.toUpperCase()
 
   // Tier 1: Binance
   if (!isCircuitOpen('binance')) {
     try {
-      const result = await fetchCandlesBinance(t, limit)
+      const result = await fetchCandlesBinance(t, limit, intervalMinutes)
       recordSuccess('binance')
       return result
     } catch (err) {
@@ -118,7 +119,7 @@ export async function fetchCandles(token: string, limit = 60): Promise<Candle[]>
   // Tier 2: Kraken
   if (!isCircuitOpen('kraken')) {
     try {
-      const result = await fetchCandlesKraken(t, limit)
+      const result = await fetchCandlesKraken(t, limit, intervalMinutes)
       recordSuccess('kraken')
       return result
     } catch (err) {
@@ -129,17 +130,19 @@ export async function fetchCandles(token: string, limit = 60): Promise<Candle[]>
     console.warn(`[marketData] Kraken circuit open — skipping for ${t}`)
   }
 
-  // Tier 3: CoinGecko
+  // Tier 3: CoinGecko (always 1h equivalent — ignores intervalMinutes)
   console.warn(`[marketData] Falling back to CoinGecko for ${t}`)
   const result = await fetchCandlesCoinGecko(t, limit)
   return result
 }
 
-async function fetchCandlesBinance(token: string, limit: number): Promise<Candle[]> {
+const BINANCE_INTERVALS: Record<number, string> = { 60: '1h', 240: '4h', 720: '12h', 1440: '1d' }
+
+async function fetchCandlesBinance(token: string, limit: number, intervalMinutes = 60): Promise<Candle[]> {
   const pair = BINANCE_PAIRS[token]
   if (!pair) throw new Error(`No Binance pair for ${token}`)
-
-  const url = `${BINANCE_BASE}/klines?symbol=${pair}&interval=1h&limit=${limit}`
+  const interval = BINANCE_INTERVALS[intervalMinutes] ?? '1h'
+  const url = `${BINANCE_BASE}/klines?symbol=${pair}&interval=${interval}&limit=${limit}`
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
   if (!res.ok) throw new Error(`Binance klines ${res.status}: ${res.statusText}`)
 
@@ -155,12 +158,12 @@ async function fetchCandlesBinance(token: string, limit: number): Promise<Candle
   }))
 }
 
-async function fetchCandlesKraken(token: string, limit: number): Promise<Candle[]> {
+async function fetchCandlesKraken(token: string, limit: number, intervalMinutes = 60): Promise<Candle[]> {
   const pair = KRAKEN_PAIRS[token]
   if (!pair) throw new Error(`No Kraken pair for ${token}`)
-
-  // Kraken OHLC: interval=60 (minutes), returns up to 720 candles
-  const url = `${KRAKEN_BASE}/OHLC?pair=${pair}&interval=60`
+  // Kraken supported intervals: 1,5,15,30,60,240,1440,10080,21600
+  const krakenInterval = [60, 240, 1440].includes(intervalMinutes) ? intervalMinutes : 60
+  const url = `${KRAKEN_BASE}/OHLC?pair=${pair}&interval=${krakenInterval}`
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
   if (!res.ok) throw new Error(`Kraken OHLC ${res.status}: ${res.statusText}`)
 

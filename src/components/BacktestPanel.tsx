@@ -116,11 +116,19 @@ function TokenCard({ result }: { result: BacktestResult }) {
   )
 }
 
+const INTERVALS = [
+  { label: '1h',  value: 60 },
+  { label: '4h',  value: 240 },
+  { label: '12h', value: 720 },
+  { label: '24h', value: 1440 },
+]
+
 export function BacktestPanel() {
   const [results, setResults] = useState<Record<string, BacktestResult>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [candles, setCandles] = useState(500)
+  const [interval, setIntervalVal] = useState(60)
   const [ran, setRan] = useState(false)
 
   async function runBacktests() {
@@ -131,7 +139,7 @@ export function BacktestPanel() {
     await Promise.allSettled(
       SUPPORTED_TOKENS.map(async token => {
         try {
-          const res = await fetch(`/api/signal/backtest?token=${token}&limit=${candles}`)
+          const res = await fetch(`/api/signal/backtest?token=${token}&limit=${candles}&interval=${interval}`)
           if (!res.ok) { errors.push(`${token}: HTTP ${res.status}`); return }
           const data = await res.json() as BacktestResult
           if ('error' in data) { errors.push(`${token}: ${(data as { error: string }).error}`); return }
@@ -163,10 +171,21 @@ export function BacktestPanel() {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,200,80,0.15)', color: 'var(--gold)', border: '1px solid rgba(255,200,80,0.3)' }}>DEMO v1</span>
           </div>
           <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            Runs the signal engine over {candles} historical 1h candles — Kraken → CoinGecko fallback.
+            Runs the signal engine over {candles} historical candles — Kraken → CoinGecko fallback.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <select
+            value={interval}
+            onChange={e => setIntervalVal(Number(e.target.value))}
+            disabled={loading}
+            className="rounded-xl px-3 py-2 text-sm"
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink)', border: '1px solid var(--border)' }}
+          >
+            {INTERVALS.map(i => (
+              <option key={i.value} value={i.value}>{i.label} candles</option>
+            ))}
+          </select>
           <select
             value={candles}
             onChange={e => setCandles(Number(e.target.value))}
@@ -175,7 +194,7 @@ export function BacktestPanel() {
             style={{ background: 'var(--surface-raised)', color: 'var(--ink)', border: '1px solid var(--border)' }}
           >
             {[100, 200, 500].map(n => (
-              <option key={n} value={n}>{n} candles</option>
+              <option key={n} value={n}>{n} bars</option>
             ))}
           </select>
           <button
@@ -267,16 +286,17 @@ export function BacktestPanel() {
           <div>
             <span className="font-semibold" style={{ color: 'var(--accent)' }}>2. Hit the backtest endpoint:</span>
             <pre className="mt-1 rounded-lg p-3 text-xs overflow-x-auto mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-2)' }}>
-{`# Summary (default):
-curl "http://localhost:3001/signal/backtest?token=BTC&limit=500"
+{`# 1h candles (default):
+curl "http://localhost:3001/api/signal/backtest?token=BTC&limit=500"
 
-# With full per-trade breakdown:
-curl "http://localhost:3001/signal/backtest?token=BTC&limit=500&trades=true"
+# 4h candles:
+curl "http://localhost:3001/api/signal/backtest?token=BTC&interval=240&limit=500"
 
-# All tokens:
-for t in BTC ETH SOL ARB MATIC; do
-  curl -s "http://localhost:3001/signal/backtest?token=$t&limit=500"
-done`}
+# 12h candles:
+curl "http://localhost:3001/api/signal/backtest?token=SOL&interval=720&limit=500"
+
+# 24h candles with full per-trade data:
+curl "http://localhost:3001/api/signal/backtest?token=ETH&interval=1440&limit=500&trades=true"`}
             </pre>
           </div>
           <div>

@@ -231,12 +231,14 @@ Bun.serve({
     // GET /signal/backtest?token=BTC&limit=200
     if (path === '/signal/backtest' && req.method === 'GET') {
       const token = (url.searchParams.get('token') ?? '').toUpperCase()
-      const limit = Math.min(500, Math.max(60, parseInt(url.searchParams.get('limit') ?? '200', 10)))
+      const limit = Math.min(720, Math.max(60, parseInt(url.searchParams.get('limit') ?? '200', 10)))
+      const intervalMinutes = parseInt(url.searchParams.get('interval') ?? '60', 10)
       if (!token) return json({ error: 'Missing ?token=' }, 400)
       if (!SUPPORTED_TOKENS.includes(token)) return json({ error: `Unsupported token: ${token}` }, 400)
+      if (![60, 240, 720, 1440].includes(intervalMinutes)) return json({ error: 'interval must be 60, 240, 720, or 1440' }, 400)
       const includeTrades = url.searchParams.get('trades') === 'true'
       try {
-        const candles = await fetchCandles(token, limit)
+        const candles = await fetchCandles(token, limit, intervalMinutes)
         const result = backtestSignal(token, candles)
         const { trades, ...summary } = result
         return json({
