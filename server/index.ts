@@ -30,7 +30,7 @@ const SIGNAL_CACHE_TTL_MS = 10 * 60 * 1000  // 10 min
 // Set these in Render: Dashboard → Your service → Environment
 //
 //   CONTRACT_ADDRESS   — PredictAgent contract address on Arc mainnet
-//                        e.g. 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff
+//                        e.g. 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f
 //   SELLER_PRIVATE_KEY — Seller wallet private key (0x-prefixed, hex)
 //                        Used for automatic commitSignal() after RequestCreated
 //   ARC_RPC_URL        — Arc mainnet RPC endpoint

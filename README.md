@@ -19,7 +19,7 @@ Built for the **Arc Microgrants Program** · Target: Arc ecosystem grant · Subm
 |---|---|
 | **Live app** | https://predict-agent.vercel.app |
 | **Signal API** | https://predictagent.onrender.com/api/health |
-| **Contract** | [`0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff`](https://explorer.arc.io/address/0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff) |
+| **Contract** | [`0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f`](https://explorer.arc.io/address/0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f) |
 | **Deploy TX** | [`0xc26132b...`](https://explorer.arc.io/tx/0xc26132b0a3336a6102ca8aebfe5b067d4f7631b66fe302b41057e3ab3d0df06c) |
 | **Architecture** | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | **Self-audit** | [AUDIT.md](AUDIT.md) |
@@ -47,7 +47,7 @@ curl "https://predictagent.onrender.com/api/signal/backtest?token=ETH&limit=200&
 # 5. Verify the contract is deployed on Arc mainnet
 curl -s -X POST https://rpc.mainnet.arc.io \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff","latest"],"id":1}' \
+  -d '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f","latest"],"id":1}' \
   | grep -o '"result":"0x[0-9a-f]*"' | head -c 80
 ```
 
@@ -83,7 +83,7 @@ USDC is the native gas token on Arc — not a secondary asset. That one property
 
 | Component | Used | Evidence / reason |
 |---|---|---|
-| Arc mainnet | ✅ | Deployed: `0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff` |
+| Arc mainnet | ✅ | Deployed: `0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f` |
 | USDC (Arc predeploy `0x3600...`) | ✅ | Hardcoded constant in `PredictAgent.sol`; all escrow in USDC |
 | Foundry (forge build/test) | ✅ | 51 tests, CI badge above |
 | Chainlink Data Feeds | ✅ (upgrade path) | `PredictAgentChainlink.sol` — trustless settlement |

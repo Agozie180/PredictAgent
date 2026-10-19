@@ -18,25 +18,25 @@ Everything you need to evaluate this project in under 10 minutes.
 ## 2. Contract on Arc mainnet
 
 ```
-Address:  0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff
+Address:  0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f
 Chain:    Arc Mainnet (5042)
-Explorer: https://explorer.arc.io/address/0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff
+Explorer: https://explorer.arc.io/address/0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f
 ```
 
 Read live state (no wallet needed):
 ```bash
 # Signal fee
-cast call 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
+cast call 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f \
   "signalFeeUsdc()(uint256)" \
   --rpc-url https://rpc.mainnet.arc.io
 
 # Next request ID
-cast call 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
+cast call 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f \
   "nextRequestId()(uint256)" \
   --rpc-url https://rpc.mainnet.arc.io
 
 # Get a request (replace 1 with any requestId)
-cast call 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
+cast call 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f \
   "getRequest(uint256)((uint256,address,string,uint256,uint256,bytes32,bytes32,uint256,uint256,uint256,uint256,uint8,address,uint256,bool,bool))" \
   1 --rpc-url https://rpc.mainnet.arc.io
 ```
@@ -120,7 +120,7 @@ curl "https://predictagent.onrender.com/signal/latest?token=BTC"
 ```bash
 cast send 0x3600000000000000000000000000000000000000 \
   "approve(address,uint256)" \
-  0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff 100000 \
+  0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f 100000 \
   --rpc-url https://rpc.mainnet.arc.io \
   --private-key $BUYER_KEY
 ```
@@ -128,7 +128,7 @@ cast send 0x3600000000000000000000000000000000000000 \
 ### Step B — Buyer requests a signal
 ```bash
 # windowOpen = now + 60s, windowClose = now + 3660s, buyerRevealOffset = 0 (use global default)
-cast send 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
+cast send 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f \
   "requestSignal(string,uint256,uint256,uint256)(uint256)" \
   "BTC" $(($(date +%s) + 60)) $(($(date +%s) + 3660)) 0 \
   --rpc-url https://rpc.mainnet.arc.io \
@@ -142,7 +142,7 @@ curl -s -X POST https://predictagent.onrender.com/signal/commit \
   -d '{"token":"BTC","requestId":"1"}'
 # Returns: commitHash + revealData (keep revealData secret)
 
-cast send 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
+cast send 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f \
   "commitSignal(uint256,bytes32)" \
   1 0xYOUR_COMMIT_HASH \
   --rpc-url https://rpc.mainnet.arc.io \
@@ -151,7 +151,7 @@ cast send 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
 
 ### Step D — Seller reveals (after windowClose)
 ```bash
-cast send 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
+cast send 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f \
   "revealSignal(uint256,bytes32,uint256,uint256,uint256,uint256)" \
   1 $DIRECTION $TARGET_PRICE $CONF_BAND $SIGNAL_TIMESTAMP $NONCE \
   --rpc-url https://rpc.mainnet.arc.io \
@@ -160,7 +160,7 @@ cast send 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
 
 ### Step E — Owner/verifier records outcome → auto-settles
 ```bash
-cast send 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
+cast send 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f \
   "recordOutcome(uint256,bool)" \
   1 true \
   --rpc-url https://rpc.mainnet.arc.io \

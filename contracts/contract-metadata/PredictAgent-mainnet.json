@@ -1,10 +1,12 @@
 {
   "contract": "PredictAgent",
-  "address": "0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff",
-  "txHash": "0xc26132b0a3336a6102ca8aebfe5b067d4f7631b66fe302b41057e3ab3d0df06c",
+  "address": "0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f",
+  "txHash": "",
   "chain": "Arc Mainnet",
   "chainId": 5042,
-  "deployedAt": "2026-10-17T15:40:16Z",
-  "signalFeeUsdc": "1000000",
-  "explorer": "https://explorer.arc.io/address/0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff"
+  "deployedAt": "2026-10-19T00:00:00Z",
+  "seller": "0x8fBF69eb3A041CF218F98477F4C3250f21D089ce",
+  "owner": "0x3A19bdD9d012E0d1d53bd79fe54c68b4c20B7dc3",
+  "signalFeeUsdc": "100000",
+  "explorer": "https://explorer.arc.io/address/0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f"
 }

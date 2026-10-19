@@ -331,7 +331,7 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
                   View buyer on explorer <ExternalLink size={10} />
                 </a>
                 <a
-                  href={buildAddressExplorerUrl(arc.id, '0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff')}
+                  href={buildAddressExplorerUrl(arc.id, '0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f')}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 transition-opacity hover:opacity-70 min-h-[44px]"
@@ -351,7 +351,7 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
               No request found for ID #{lookupId.toString()}.
             </p>
             <a
-              href={buildAddressExplorerUrl(arc.id, '0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff')}
+              href={buildAddressExplorerUrl(arc.id, '0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f')}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-70"

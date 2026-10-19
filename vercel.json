@@ -5,7 +5,7 @@
   "build": {
     "env": {
       "VITE_API_URL": "https://predictagent.onrender.com",
-      "VITE_CONTRACT_ADDRESS": "0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff"
+      "VITE_CONTRACT_ADDRESS": "0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f"
     }
   },
   "rewrites": [
