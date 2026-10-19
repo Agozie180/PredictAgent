@@ -8,11 +8,13 @@ import { SignalFeed } from './components/SignalFeed'
 import { BuySignal } from './components/BuySignal'
 import { RequestDetail } from './components/RequestDetail'
 import { BacktestPanel } from './components/BacktestPanel'
-import { BarChart2, ShoppingCart, Search, Zap, FlaskConical } from 'lucide-react'
+import { LandingPage } from './components/LandingPage'
+import { BarChart2, ShoppingCart, Search, Zap, FlaskConical, Home } from 'lucide-react'
 
-type View = 'feed' | 'buy' | 'detail' | 'backtest'
+type View = 'home' | 'feed' | 'buy' | 'detail' | 'backtest'
 
 const TABS = [
+  { id: 'home' as View, label: 'About', icon: Home },
   { id: 'feed' as View, label: 'Signal Feed', icon: BarChart2 },
   { id: 'backtest' as View, label: 'Backtest', icon: FlaskConical },
   { id: 'buy'  as View, label: 'Buy Signal',  icon: ShoppingCart },
@@ -20,7 +22,7 @@ const TABS = [
 ]
 
 export default function App() {
-  const [view, setView] = useState<View>('feed')
+  const [view, setView] = useState<View>('home')
   const [detailRequestId, setDetailRequestId] = useState<string | undefined>()
 
   function navigate(v: View) {
@@ -90,8 +92,11 @@ export default function App() {
 
             {/* ── Main content ─────────────────────────────────────────── */}
             <main className="flex-1 min-w-0">
-              <Disclaimer />
+              {view !== 'home' && <Disclaimer />}
 
+              {view === 'home' && (
+                <LandingPage onEnterApp={() => navigate('feed')} />
+              )}
               {view === 'feed' && (
                 <SignalFeed onBuySignal={() => navigate('buy')} />
               )}
