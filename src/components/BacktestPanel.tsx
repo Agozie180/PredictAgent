@@ -5,6 +5,7 @@
  * Prominent disclaimer: in-sample, look-ahead bias, not financial advice.
  */
 import { useState } from 'react'
+import { apiUrl } from '@/api'
 import { AlertTriangle, RefreshCw, FlaskConical, TrendingUp, TrendingDown, Info } from 'lucide-react'
 import { SUPPORTED_TOKENS } from '../lib/utils'
 import { TokenIcon } from './TokenIcon'
@@ -139,7 +140,7 @@ export function BacktestPanel() {
     await Promise.allSettled(
       SUPPORTED_TOKENS.map(async token => {
         try {
-          const res = await fetch(`/api/signal/backtest?token=${token}&limit=${candles}&interval=${interval}`)
+          const res = await fetch(apiUrl(`/api/signal/backtest?token=${token}&limit=${candles}&interval=${interval}`))
           if (!res.ok) { errors.push(`${token}: HTTP ${res.status}`); return }
           const data = await res.json() as BacktestResult
           if ('error' in data) { errors.push(`${token}: ${(data as { error: string }).error}`); return }
@@ -287,16 +288,16 @@ export function BacktestPanel() {
             <span className="font-semibold" style={{ color: 'var(--accent)' }}>2. Hit the backtest endpoint:</span>
             <pre className="mt-1 rounded-lg p-3 text-xs overflow-x-auto mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-2)' }}>
 {`# 1h candles (default):
-curl "http://localhost:3001/api/signal/backtest?token=BTC&limit=500"
+curl "https://predictagent.onrender.com/signal/backtest?token=BTC&limit=500"
 
 # 4h candles:
-curl "http://localhost:3001/api/signal/backtest?token=BTC&interval=240&limit=500"
+curl "https://predictagent.onrender.com/signal/backtest?token=BTC&interval=240&limit=500"
 
 # 12h candles:
-curl "http://localhost:3001/api/signal/backtest?token=SOL&interval=720&limit=500"
+curl "https://predictagent.onrender.com/signal/backtest?token=SOL&interval=720&limit=500"
 
 # 24h candles with full per-trade data:
-curl "http://localhost:3001/api/signal/backtest?token=ETH&interval=1440&limit=500&trades=true"`}
+curl "https://predictagent.onrender.com/signal/backtest?token=ETH&interval=1440&limit=500&trades=true"`}
             </pre>
           </div>
           <div>

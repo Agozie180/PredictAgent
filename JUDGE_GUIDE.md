@@ -71,29 +71,29 @@ Expected: `30 pass, 0 fail`
 ### Start the signal service
 ```bash
 bun run server
-# Listening on http://localhost:3001
+# Listening on https://predictagent.onrender.com
 ```
 
 ### Run backtests
 ```bash
 # BTC — 500 candles, ~74 signal windows
-curl "http://localhost:3001/signal/backtest?token=BTC&limit=500"
+curl "https://predictagent.onrender.com/signal/backtest?token=BTC&limit=500"
 
 # ETH, SOL, ARB
 for t in ETH SOL ARB; do
-  echo "=== $t ===" && curl -s "http://localhost:3001/signal/backtest?token=$t&limit=500" | \
+  echo "=== $t ===" && curl -s "https://predictagent.onrender.com/signal/backtest?token=$t&limit=500" | \
     python3 -c "import sys,json; d=json.load(sys.stdin); print(f'  windows={d[\"windowCount\"]} winRate={d[\"winRate\"]:.1%} avgStrength={d[\"avgStrength\"]:.1f}')"
 done
 
 # Per-trade breakdown (BTC, 500 candles)
-curl "http://localhost:3001/signal/backtest?token=BTC&limit=500&trades=true" | \
+curl "https://predictagent.onrender.com/signal/backtest?token=BTC&limit=500&trades=true" | \
   python3 -c "import sys,json; d=json.load(sys.stdin); trades=d.get('trades',[]); print(f'{len(trades)} trades, {sum(t[\"directionalWin\"] for t in trades)} directional wins')"
 ```
 
 ### Start the frontend
 ```bash
 bun run dev
-# http://localhost:5173
+# https://predict-agent.vercel.app
 ```
 
 ---
@@ -102,7 +102,7 @@ bun run dev
 
 ```bash
 # Latest BTC signal
-curl "http://localhost:3001/signal/latest?token=BTC"
+curl "https://predictagent.onrender.com/signal/latest?token=BTC"
 
 # Response includes:
 # - direction: BULLISH | BEARISH
@@ -137,7 +137,7 @@ cast send 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff \
 
 ### Step C — Seller commits signal hash (before windowOpen)
 ```bash
-curl -s -X POST http://localhost:3001/signal/commit \
+curl -s -X POST https://predictagent.onrender.com/signal/commit \
   -H 'Content-Type: application/json' \
   -d '{"token":"BTC","requestId":"1"}'
 # Returns: commitHash + revealData (keep revealData secret)

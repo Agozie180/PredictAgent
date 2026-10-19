@@ -156,7 +156,7 @@ cast send $CONTRACT "requestSignal(string,uint256,uint256,uint256)" \
   --rpc-url https://rpc.arc.io --private-key $BUYER_KEY
 
 # 3. Seller gets commit hash from signal service
-curl -X POST http://localhost:3001/signal/commit \
+curl -X POST https://predictagent.onrender.com/signal/commit \
   -H 'Content-Type: application/json' \
   -d '{"token":"BTC","requestId":"1"}'
 # → { commitHash, revealData: { direction, targetPrice, confidenceBandBps, signalTimestamp, nonce } }

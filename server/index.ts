@@ -180,7 +180,7 @@ Bun.serve({
     }
 
     // GET /health
-    if (path === '/health') {
+    if (path === '/health' || path === '/api/health') {
       return json({
         status: 'ok',
         version: 'demo-v1',
@@ -192,7 +192,7 @@ Bun.serve({
     }
 
     // GET /prices — live spot prices for all tokens
-    if (path === '/prices' && req.method === 'GET') {
+    if ((path === '/prices' || path === '/api/prices') && req.method === 'GET') {
       if (spotPrices.length === 0 || Date.now() - spotFetchedAt > 90_000) {
         await refreshSpotPrices()
       }
@@ -200,7 +200,7 @@ Bun.serve({
     }
 
     // GET /signal/latest?token=BTC
-    if (path === '/signal/latest' && req.method === 'GET') {
+    if ((path === '/signal/latest' || path === '/api/signal/latest') && req.method === 'GET') {
       const token = (url.searchParams.get('token') ?? '').toUpperCase()
       if (!token) return json({ error: 'Missing ?token=' }, 400)
       if (!SUPPORTED_TOKENS.includes(token)) {
@@ -229,7 +229,7 @@ Bun.serve({
     }
 
     // GET /signal/backtest?token=BTC&limit=200
-    if (path === '/signal/backtest' && req.method === 'GET') {
+    if ((path === '/signal/backtest' || path === '/api/signal/backtest') && req.method === 'GET') {
       const token = (url.searchParams.get('token') ?? '').toUpperCase()
       const limit = Math.min(720, Math.max(60, parseInt(url.searchParams.get('limit') ?? '200', 10)))
       const intervalMinutes = parseInt(url.searchParams.get('interval') ?? '60', 10)
@@ -253,7 +253,7 @@ Bun.serve({
     }
 
     // POST /signal/commit — seller agent calls this to lock signal to a requestId
-    if (path === '/signal/commit' && req.method === 'POST') {
+    if ((path === '/signal/commit' || path === '/api/signal/commit') && req.method === 'POST') {
       let body: { token?: string; requestId?: string }
       try { body = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400) }
 
