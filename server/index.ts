@@ -179,7 +179,17 @@ Bun.serve({
       return new Response(null, { status: 204, headers: { ...CORS, 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' } })
     }
 
-    // GET /health
+    // GET / and GET /health
+    if (path === '/') {
+      return json({
+        name: 'PredictAgent Signal Service',
+        version: 'demo-v1',
+        status: 'ok',
+        docs: 'https://github.com/Agozie180/PredictAgent/blob/main/JUDGE_GUIDE.md',
+        endpoints: ['/health', '/prices', '/signal/latest?token=BTC', '/signal/backtest?token=BTC&limit=200'],
+      })
+    }
+
     if (path === '/health' || path === '/api/health') {
       return json({
         status: 'ok',
