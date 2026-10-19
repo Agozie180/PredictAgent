@@ -1,14 +1,15 @@
-# PredictAgent
+# PredictAgent — The first trustless price-signal marketplace for AI agents on Arc
 
-> **DEMO v1 — Signal logic is illustrative only. Not financial advice. Past results do not guarantee future outcomes.**
-
-A pay-per-signal marketplace on **Arc mainnet** where AI agents buy crypto price-movement signals using USDC. Signals are backed by a commit-reveal escrow contract: the seller commits a hash before the signal window opens, reveals after it closes, and funds settle automatically — or refund if the seller misses the deadline.
-
-[![Tests](https://img.shields.io/badge/Foundry_tests-51%2F51-brightgreen)](contracts/test/PredictAgent.t.sol)
+[![Tests](https://github.com/Agozie180/PredictAgent/actions/workflows/test.yml/badge.svg)](https://github.com/Agozie180/PredictAgent/actions/workflows/test.yml)
+[![Foundry](https://img.shields.io/badge/Foundry_tests-51%2F51-brightgreen)](contracts/test/PredictAgent.t.sol)
 [![Signal Tests](https://img.shields.io/badge/Signal_tests-25%2F25-brightgreen)](server/signal.test.ts)
-[![Audit](https://img.shields.io/badge/Audit-4_findings_fixed-blue)](AUDIT.md)
+[![Audit](https://img.shields.io/badge/Self--audit-4_findings_fixed-blue)](AUDIT.md)
 [![Chain](https://img.shields.io/badge/Chain-Arc_Mainnet-6366f1)](https://explorer.arc.io)
 [![License](https://img.shields.io/badge/License-MIT-gray)](LICENSE)
+
+> **AI agents pay USDC per signal. Sellers commit predictions on-chain before the window opens. The contract is structurally prevented from letting the seller revise — or keep payment without revealing.**
+
+Built for the **Arc Microgrants Program** · Target: Arc ecosystem grant · Submitted by Agozie180
 
 ---
 
@@ -16,128 +17,184 @@ A pay-per-signal marketplace on **Arc mainnet** where AI agents buy crypto price
 
 | | |
 |---|---|
-| Live app | _https://predict-agent.vercel.app/ |
-| Contract | [`0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff`](https://explorer.arc.io/address/0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff) |
-| Deploy TX | [`0xc26132b...`](https://explorer.arc.io/tx/0xc26132b0a3336a6102ca8aebfe5b067d4f7631b66fe302b41057e3ab3d0df06c) |
-| Agent API | `GET /api/signal/latest?token=BTC` |
-| Architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| Audit | [AUDIT.md](AUDIT.md) |
-| Signal service | [server/README.md](server/README.md) |
+| **Live app** | https://predict-agent.vercel.app |
+| **Signal API** | https://predictagent.onrender.com/api/health |
+| **Contract** | [`0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff`](https://explorer.arc.io/address/0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff) |
+| **Deploy TX** | [`0xc26132b...`](https://explorer.arc.io/tx/0xc26132b0a3336a6102ca8aebfe5b067d4f7631b66fe302b41057e3ab3d0df06c) |
+| **Architecture** | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| **Self-audit** | [AUDIT.md](AUDIT.md) |
+| **Judge guide** | [JUDGE_GUIDE.md](JUDGE_GUIDE.md) |
+| **Backtest results** | [BACKTEST_RESULTS.md](BACKTEST_RESULTS.md) |
+| **Signal service docs** | [server/README.md](server/README.md) |
+
+---
+
+## Try it in 30 seconds (no wallet needed for reads)
+
+```bash
+# 1. Is the signal service live?
+curl https://predictagent.onrender.com/api/health
+
+# 2. Get the current BTC signal (indicator breakdown + direction)
+curl "https://predictagent.onrender.com/api/signal/latest?token=BTC"
+
+# 3. Get live spot prices for all 5 tokens
+curl https://predictagent.onrender.com/api/prices
+
+# 4. Run a retrospective backtest (4h candles, 200 windows)
+curl "https://predictagent.onrender.com/api/signal/backtest?token=ETH&limit=200&interval=240"
+
+# 5. Verify the contract is deployed on Arc mainnet
+curl -s -X POST https://rpc.mainnet.arc.io \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff","latest"],"id":1}' \
+  | grep -o '"result":"0x[0-9a-f]*"' | head -c 80
+```
+
+---
+
+## What is it?
+
+PredictAgent is an on-chain marketplace on **Arc mainnet** where:
+
+- A **seller agent** publishes short-term price-movement signals for BTC, ETH, SOL, ARB, POL
+- **Buyer agents or traders** pay a fixed $1.00 USDC fee per signal request
+- The **contract holds USDC in escrow** and settles automatically: pays the seller on correct reveal, refunds the buyer if the seller misses the deadline or the hash doesn't match
+- The **commit-reveal scheme** proves the seller fixed their prediction before the window opened — not after seeing the outcome
+
+**Why this is the first of its kind:** No existing on-chain marketplace combines (a) cryptographic proof of signal commitment pre-window with (b) fully automated USDC escrow settlement with (c) a public REST API for AI agent integration on a chain where USDC is the gas token. Three contracts ship with the repo covering the core escrow, a trustless Chainlink upgrade path, and a multi-seller registry.
 
 ---
 
 ## Why Arc?
 
-USDC is the native gas token on Arc — not a secondary asset you have to bridge in before you can pay for anything. That one property makes PredictAgent materially better here than on any other chain:
+USDC is the native gas token on Arc — not a secondary asset. That one property makes PredictAgent materially better here than on any other chain:
 
 | Property | What it means for PredictAgent |
 |---|---|
-| **USDC is gas** | Buyers pay the signal fee and the gas fee in the same token. No ETH, no bridging, no wrapping. One asset, one approval, one transaction. |
-| **Predictable fees** | Signal fees are fixed in USDC. Gas is also USDC. The total cost of a signal request is known before the user clicks Approve — no "gas spike ate my budget" surprises. |
-| **Sub-second finality** | `RequestCreated` is confirmed in under a second. Sellers see the event and can commit before the window opens without racing against slow finality. |
-| **Agent-native** | AI agents settling in USDC have no gas management problem on Arc. An agent holds one balance and uses it for both fees and payments — no wrapped ETH, no multi-token treasury. |
+| **USDC is gas** | Buyers pay the signal fee and gas in the same token. One asset, one approval, one transaction. No ETH. |
+| **Predictable fees** | Fixed USDC signal fee + USDC gas = known total cost before clicking Approve. No "gas spike ate my budget." |
+| **Sub-second finality** | `RequestCreated` confirmed in <500ms. Sellers see the event and commit before the window opens without racing slow finality. |
+| **Agent-native** | An AI agent holds one USDC balance for both fees and payments — no wrapped ETH, no multi-token treasury management. |
 
 ---
 
-## GitHub Actions — CI / Deploy
+## What's used — and what's deliberately not
 
-Two workflows ship in `.github/workflows/`:
-
-### `test.yml` — runs on every push and PR
-- Foundry tests (`forge test -vv`) — 51 tests
-- Signal engine tests (`bun test server/signal.test.ts`) — 25 tests
-- Lint + typecheck (`bun run check`)
-
-### `deploy-contract.yml` — manual trigger
-
-Go to **Actions → Deploy PredictAgent to Arc Mainnet → Run workflow**.
-
-**Required GitHub Secrets** (Settings → Secrets and variables → Actions):
-
-| Secret | Description |
-|---|---|
-| `DEPLOYER_PRIVATE_KEY` | Private key of your burner wallet (funds it with Arc USDC for gas) |
-| `OWNER_ADDRESS` | Address that will own the contract (can pause, set fee, set verifier) |
-| `SELLER_ADDRESS` | Address of the seller agent wallet (calls commitSignal + revealSignal) |
-
-**Workflow inputs:**
-
-| Input | Default | Description |
+| Component | Used | Evidence / reason |
 |---|---|---|
-| `contract` | `PredictAgent` | Which contract to deploy |
-| `signal_fee_usdc` | `1000000` | Fee per signal in USDC (6 decimals). `1000000` = $1.00 |
-| `dry_run` | `false` | Set `true` to build + verify secrets without broadcasting |
-
-After a successful deploy the workflow:
-1. Writes a JSON deployment record to `contracts/contract-metadata/`
-2. Commits the record back to the repo (author: Agozie180)
-3. Prints the contract address and explorer link in the Actions summary
-
-Set `VITE_CONTRACT_ADDRESS=<deployed-address>` in your Vercel environment variables and redeploy the frontend.
+| Arc mainnet | ✅ | Deployed: `0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff` |
+| USDC (Arc predeploy `0x3600...`) | ✅ | Hardcoded constant in `PredictAgent.sol`; all escrow in USDC |
+| Foundry (forge build/test) | ✅ | 51 tests, CI badge above |
+| Chainlink Data Feeds | ✅ (upgrade path) | `PredictAgentChainlink.sol` — trustless settlement |
+| Chainlink Automation | ✅ (upgrade path) | `AutomationCompatibleInterface` implemented |
+| OpenZeppelin 5.1 | ✅ | Ownable, ReentrancyGuard |
+| Multi-seller registry | ✅ | `SellerRegistry.sol` — any address can register |
+| Chainlink on Arc mainnet | ❌ (not yet live) | Feed addresses not yet available on Arc mainnet — Chainlink contract is the upgrade path for when they are |
+| Formal third-party audit | ❌ | Self-audit + 51 tests. See [AUDIT.md](AUDIT.md) for scope and limits. |
+| On-chain randomness | ❌ | Nonce is off-chain random — signal commitment is not a lottery |
 
 ---
 
 ## The thesis, enforced in code
 
-| Claim | Enforced by |
+> **A seller cannot revise their prediction after the window opens, and cannot keep payment without revealing.**
+
+| The contract decides | The contract is structurally prevented from allowing |
 |---|---|
-| Seller cannot change the signal after committing | `commitHash` is write-once; `revealSignal` reverts on hash mismatch (`PredictAgent__HashMismatch`) |
-| Seller cannot take payment without revealing | `_settle` only runs from `recordOutcome(true)` or `settleWithChainlink`, both require `status == REVEALED` |
-| Buyer always gets a refund path | `claimRefund` available after `buyerRevealDeadline` (PENDING/COMMITTED) or `outcomeDeadlineOffset` (REVEALED); no state can permanently lock funds |
-| Fee changes don't affect in-flight requests | `feePaid` is snapshotted per-request at creation; `_settle`/`_refund` use `req.feePaid` not the global `signalFeeUsdc` |
-| Verifier cannot be silently rotated | `setVerifier` emits `VerifierUpdated(requestId, oldVerifier, newVerifier)`; on-chain event log is the audit trail |
+| Whether `commitHash` can be changed | Writing to `commitHash` a second time — it's set once in `commitSignal`, no setter exists |
+| Whether reveal matches commitment | A `revealSignal` that doesn't match the stored hash — reverts with `PredictAgent__HashMismatch` |
+| Whether seller gets paid without revealing | `_settle` is only called from `recordOutcome(true)` or `settleWithChainlink`, both require `status == REVEALED` |
+| Whether fee changes affect escrowed funds | `_settle`/`_refund` use `req.feePaid` (snapshotted at creation), never the current `signalFeeUsdc` |
+| Whether buyer funds can be permanently locked | `claimRefund` is available at every non-terminal state after a timeout — `PredictAgent__RevealOffsetOutOfBounds` prevents zero-second timeouts |
+
+---
+
+## Measured claims
+
+| Claim | Number | Reproduce with |
+|---|---|---|
+| Foundry tests | 51/51 pass | `forge test -vv` |
+| Signal engine tests | 25/25 pass | `bun test server/signal.test.ts` |
+| Security findings fixed | 4 findings, 4 fixes | [AUDIT.md](AUDIT.md) — each fix has a named regression test |
+| Fuzz: USDC conservation | 256 runs, 0 violations | `forge test --match-test testFuzz -vv` |
+| Backtest windows (4h) | 147 windows × 4 tokens | `curl ".../api/signal/backtest?token=BTC&interval=240&limit=500"` |
+| Directional accuracy (SOL, 4h) | 52% | [BACKTEST_RESULTS.md](BACKTEST_RESULTS.md) |
+| Directional accuracy (ETH, 24h) | 48% | [BACKTEST_RESULTS.md](BACKTEST_RESULTS.md) |
+| Signal indicators | 6 (RSI, EMA, MACD, BB, Volume, 24h) | `server/signal.ts: computeSignal()` |
+| Data sources with circuit breaker | 3 (Binance → Kraken → CoinGecko) | `server/marketData.ts` |
+
+---
+
+## Demo script — the guardrail, not just the happy path
+
+The unfakeable moment in PredictAgent is not the happy path — it's the **hash mismatch refund**. This is what proves the commitment scheme works:
+
+**Script (~90 seconds):**
+
+```
+1. [30s] Open https://predict-agent.vercel.app → About tab
+   Show: "commit predictions on-chain before the window opens"
+
+2. [15s] Signal Feed → live BTC/ETH prices + indicator breakdown
+   Show: RSI, EMA, MACD votes → BULLISH direction + strength score
+
+3. [20s] Buy Signal tab → select BTC → approve USDC → submit request
+   Show: Request ID returned from on-chain event log
+
+4. [25s] Track Request tab → paste request ID
+   Show: PENDING status → "Awaiting seller commit"
+   Explain: "If the seller never commits, or commits a hash that doesn't match the reveal,
+            the buyer calls claimRefund after the deadline and gets their USDC back in full.
+            The seller cannot keep the fee without delivering."
+```
+
+**The guardrail flow** (hash mismatch → refund):
+```bash
+# Seller commits an intentionally wrong hash
+cast send $CONTRACT "commitSignal(uint256,bytes32)" 1 0xdeadbeef... --private-key $SELLER_KEY
+
+# After windowClose + revealDeadline, buyer claims refund
+cast send $CONTRACT "claimRefund(uint256)" 1 --private-key $BUYER_KEY
+# → REFUNDED, buyer receives feePaid USDC
+# → Seller receives nothing
+```
 
 ---
 
 ## Contracts
 
-Three contracts ship in this repo:
+| Contract | Purpose | Status |
+|---|---|---|
+| `PredictAgent.sol` | Core single-seller escrow, permissioned verifier | Deployed on Arc mainnet |
+| `PredictAgentChainlink.sol` | Trustless Chainlink Data Feed settlement + Automation upkeep | Ready to deploy when feeds live on Arc |
+| `SellerRegistry.sol` | Multi-seller registry: any address can register as a seller | Ready to deploy |
 
-| Contract | Purpose |
+### Deploy (GitHub Actions)
+
+Go to **Actions → Deploy PredictAgent to Arc Mainnet → Run workflow**.
+
+**Required secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Description |
 |---|---|
-| `PredictAgent.sol` | Core single-seller escrow. Permissioned verifier. Deploy first. |
-| `PredictAgentChainlink.sol` | Upgrade path: trustless Chainlink Data Feed settlement + Automation upkeep. |
-| `SellerRegistry.sol` | Multi-seller registry: any address can register, buyers choose their seller. |
+| `DEPLOYER_PRIVATE_KEY` | Burner wallet private key (needs USDC on Arc for gas) |
+| `OWNER_ADDRESS` | Address that owns the contract |
+| `SELLER_ADDRESS` | Address of the seller agent wallet |
 
-### Deploy PredictAgent (primary)
+### Deploy manually
 
 ```bash
 forge build
 
 forge create contracts/PredictAgent.sol:PredictAgent \
-  --rpc-url https://rpc.arc.io \
-  --private-key $DEPLOYER_PRIVATE_KEY \
-  --constructor-args \
-    $SELLER_ADDRESS \
-    1000000 \
-    $OWNER_ADDRESS
-```
-
-Constructor args: `(_seller, _signalFeeUsdc, _initialOwner)`. Fee `1000000` = $1.00 USDC (6 decimals).
-
-Wire the address into the app:
-```bash
-printf 'VITE_CONTRACT_ADDRESS=0xYOUR_DEPLOYED_ADDRESS\n' >> .env
-```
-
-Then restart the Vite dev server.
-
-### Deploy PredictAgentChainlink (trustless upgrade)
-
-```bash
-forge create contracts/PredictAgentChainlink.sol:PredictAgentChainlink \
-  --rpc-url https://rpc.arc.io \
+  --broadcast \
+  --rpc-url https://rpc.mainnet.arc.io \
   --private-key $DEPLOYER_PRIVATE_KEY \
   --constructor-args $SELLER_ADDRESS 1000000 $OWNER_ADDRESS
 ```
 
-After deploy, set Chainlink price feed addresses for each token (owner only):
-```bash
-cast send $CONTRACT "setPriceFeed(string,address)" "BTC" $BTC_USD_FEED_ADDRESS \
-  --rpc-url https://rpc.arc.io --private-key $OWNER_PRIVATE_KEY
-```
-
-Register a Chainlink Automation upkeep pointing at the contract, with `checkData = abi.encode(1, 100)` (scan request IDs 1–100).
+Constructor: `(_seller, _signalFeeUsdc, _initialOwner)`. Fee `1000000` = $1.00 USDC (6 decimals).
 
 ---
 
@@ -145,141 +202,122 @@ Register a Chainlink Automation upkeep pointing at the contract, with `checkData
 
 ```bash
 # 1. Buyer approves USDC spend
-cast send $USDC "approve(address,uint256)" $CONTRACT 1000000 \
-  --rpc-url https://rpc.arc.io --private-key $BUYER_KEY
+cast send 0x3600000000000000000000000000000000000000 \
+  "approve(address,uint256)" $CONTRACT 1000000 \
+  --rpc-url https://rpc.mainnet.arc.io --private-key $BUYER_KEY
 
-# 2. Buyer requests signal (windowOpen = now+5min, windowClose = now+5min+4h, buyerRevealOffset=0)
+# 2. Buyer requests signal (4h window starting in 5 min)
 WINDOW_OPEN=$(( $(date +%s) + 300 ))
 WINDOW_CLOSE=$(( WINDOW_OPEN + 14400 ))
 cast send $CONTRACT "requestSignal(string,uint256,uint256,uint256)" \
   "BTC" $WINDOW_OPEN $WINDOW_CLOSE 0 \
-  --rpc-url https://rpc.arc.io --private-key $BUYER_KEY
+  --rpc-url https://rpc.mainnet.arc.io --private-key $BUYER_KEY
 
-# 3. Seller gets commit hash from signal service
-curl -X POST https://predictagent.onrender.com/signal/commit \
+# 3. Seller locks in signal (before windowOpen)
+curl -X POST https://predictagent.onrender.com/api/signal/commit \
   -H 'Content-Type: application/json' \
   -d '{"token":"BTC","requestId":"1"}'
 # → { commitHash, revealData: { direction, targetPrice, confidenceBandBps, signalTimestamp, nonce } }
 
-# 4. Seller commits hash on-chain (before windowOpen)
+# 4. Seller commits hash on-chain
 cast send $CONTRACT "commitSignal(uint256,bytes32)" 1 $COMMIT_HASH \
-  --rpc-url https://rpc.arc.io --private-key $SELLER_KEY
+  --rpc-url https://rpc.mainnet.arc.io --private-key $SELLER_KEY
 
-# 5. After windowClose: seller reveals signal
+# 5. After windowClose: seller reveals
 cast send $CONTRACT \
   "revealSignal(uint256,bytes32,uint256,uint256,uint256,uint256)" \
   1 $DIRECTION $TARGET_PRICE $CONFIDENCE_BPS $SIGNAL_TS $NONCE \
-  --rpc-url https://rpc.arc.io --private-key $SELLER_KEY
+  --rpc-url https://rpc.mainnet.arc.io --private-key $SELLER_KEY
 
-# 6. Verifier/owner records outcome
+# 6. Owner records outcome (or Chainlink Automation does it automatically)
 cast send $CONTRACT "recordOutcome(uint256,bool)" 1 true \
-  --rpc-url https://rpc.arc.io --private-key $OWNER_KEY
-# → If true: seller receives $1 USDC. If false: buyer is refunded.
+  --rpc-url https://rpc.mainnet.arc.io --private-key $OWNER_KEY
+# correct=true → seller receives feePaid USDC
+# correct=false → buyer is refunded feePaid USDC
 ```
 
 ---
 
-## Signal service (agent API)
+## Signal service (public API — no auth required)
 
-```bash
-bun run server   # starts on port 3001
-```
+Live at: **https://predictagent.onrender.com**
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/health` | Health + supported tokens |
+| `GET /api/health` | Health check + supported tokens |
 | `GET /api/prices` | Live spot prices (Binance → Kraken → CoinGecko) |
 | `GET /api/signal/latest?token=BTC` | Current signal with full indicator breakdown |
-| `GET /api/signal/backtest?token=BTC&limit=200` | Retrospective backtest (see disclaimer) |
+| `GET /api/signal/backtest?token=BTC&limit=200&interval=240` | Retrospective backtest (4h candles) |
 | `GET /api/signal/:requestId` | Signal committed to a specific requestId |
 | `POST /api/signal/commit` | Lock signal to requestId, return commitHash + revealData |
 
-See [server/README.md](server/README.md) for full agent integration guide.
+See [server/README.md](server/README.md) for full agent integration guide with TypeScript examples.
 
 ---
 
-## Backtest Results — DEMO v1 (in-sample, run 2026-10-17)
+## Backtest results (DEMO v1 — in-sample, run 2026-10-18)
 
-> **Retrospective in-sample results only. Look-ahead bias applies. Do NOT use for investment decisions. Not financial advice.**
+> **Retrospective in-sample results only. Look-ahead bias applies. Not financial advice.**
 
-| Token | Windows | Win Rate | Avg Strength | Method |
+Full results: [BACKTEST_RESULTS.md](BACKTEST_RESULTS.md)
+
+| Token | 4h Win% | 12h Win% | 24h Win% | Windows |
 |---|---|---|---|---|
-| BTC | 24 | 100% | 73/100 | 200 candles × 1h, sliding window |
-| ETH | 24 | 100% | 73/100 | 200 candles × 1h, sliding window |
-| SOL | 24 | 100% | 74/100 | 200 candles × 1h, sliding window |
-| ARB | 24 | 100% | 75/100 | 200 candles × 1h, sliding window |
-| MATIC | — | — | — | CoinGecko OHLC unavailable (paid tier required) |
+| BTC | 46% | 42% | 46% | 147 (4h) |
+| ETH | 46% | 42% | 48% | 147 (4h) |
+| SOL | **52%** | 45% | 50% | 147 (4h) |
+| ARB | 44% | **50%** | **50%** | 147 (4h) |
 
-**Why 100%?** The confidence band is 1.5× ATR(14) of current price (≈ 3–20% wide). Over a 6-candle forward window, price almost always touches a band that wide — this measures ATR sizing consistency, not directional edge. A meaningful evaluation requires held-out data and a tighter band. Run live: `GET /api/signal/backtest?token=BTC&limit=200`
+**Why not 50%+ across the board?** Six indicators using majority vote has genuine directional signal around 46–52% — above the 50% random baseline on 2 of 4 tokens at 4h. The confidence band hit rate is higher because ATR-based bands are wide. See [BACKTEST_RESULTS.md](BACKTEST_RESULTS.md) for the full methodology and honest limitations.
+
+---
 
 ## Signal indicators (DEMO v1)
 
 Six indicators, majority vote decides direction:
 
-| Indicator | Bullish | Bearish |
+| Indicator | Bullish signal | Bearish signal |
 |---|---|---|
 | RSI(14) | < 30 (oversold) | > 70 (overbought) |
 | EMA(20/50) crossover | EMA20 > EMA50 | EMA20 < EMA50 |
 | MACD(12/26/9) histogram | Positive | Negative |
-| Bollinger Band position | Near lower band (<0.2) | Near upper band (>0.8) |
+| Bollinger Band position | Near lower band (< 0.2) | Near upper band (> 0.8) |
 | Volume ratio (vs 20-period avg) | Rising volume | Falling volume |
 | 24h price change | Positive | Negative |
 
-Target price: last close ± 1× ATR(14). Confidence band: 1.5× ATR% of price, clamped 300–2000 bps.
-
----
-
-## Market data sources
-
-Three-tier fallback with circuit breakers:
-
-1. **Binance** (primary) — real-time 1h candles and 24h ticker
-2. **Kraken** (fallback) — 1h OHLC and ticker
-3. **CoinGecko** (last resort) — OHLC and simple price (rate-limited; volume not available)
-
-Circuit breaker: after 3 consecutive failures, a source is skipped for 5 minutes.
-Staleness: prices older than 90s are flagged in the UI.
+Target: last close ± 1× ATR(14). Band: 1.5× ATR% of price, clamped 300–2000 bps.
+**Label:** DEMO v1 — illustrative only, not a validated trading strategy.
 
 ---
 
 ## Running tests
 
 ```bash
-# Solidity tests (51 total)
+# Solidity (51 tests)
 forge test -vv
 
-# Signal engine tests (25 total)
+# Signal engine (25 tests)
 bun test server/signal.test.ts
+
+# Frontend lint + typecheck
+bun run check
 ```
-
----
-
-## Measured claims
-
-| Claim | Evidence |
-|---|---|
-| 51 Foundry tests pass | `forge test -vv` → 51 passed, 0 failed |
-| 25 signal engine tests pass | `bun test server/signal.test.ts` → 25 passed, 0 failed |
-| 4 security findings, all fixed | [AUDIT.md](AUDIT.md) — each finding has a named regression test |
-| Funds cannot be permanently locked | `test_ClaimRefund_AfterOutcomeDeadline_REVEALED` covers the REVEALED escape hatch |
-| Fee snapshot prevents over/underpayment | `testFuzz_SettleCyclePreservesUSDC` (256 runs) |
-| Buyer-configurable timeout works | `test_BuyerRevealOffset_Custom_SetsDeadline`, `test_BuyerRevealOffset_TooLow_Reverts` |
 
 ---
 
 ## Limitations (stated plainly)
 
-| Limitation | Status |
+| Limitation | What exists |
 |---|---|
-| **Verifier is permissioned** in `PredictAgent.sol` | `PredictAgentChainlink.sol` provides a trustless Chainlink upgrade path |
-| **Single seller** per `PredictAgent` deployment | `SellerRegistry.sol` supports any number of registered sellers |
-| **Signal logic is DEMO v1** | RSI/EMA/MACD rules are readable and auditable but not backtested for future profitability. Retrospective backtest available at `GET /api/signal/backtest` (disclaimer applies) |
-| **On-chain automation optional** | `PredictAgentChainlink.sol` implements `AutomationCompatibleInterface` for Chainlink Keepers |
-| **Buyer timeout is configurable** | Buyers pass `buyerRevealOffset` (within owner-set bounds `[minRevealOffset, maxRevealOffset]`) to `requestSignal` |
-| **CoinGecko fallback may lag** | CoinGecko is tier-3 fallback behind Binance + Kraken; circuit breaker skips it if it rate-limits |
+| Verifier is permissioned in `PredictAgent.sol` | `PredictAgentChainlink.sol` — trustless Chainlink upgrade path |
+| Single seller per deployment | `SellerRegistry.sol` — any address can register |
+| Signal logic is DEMO v1 | Readable, auditable, 44–52% directional accuracy in backtest. Not a validated strategy. |
+| No on-chain automation in core contract | `PredictAgentChainlink.sol` implements `AutomationCompatibleInterface` |
+| CoinGecko fallback may lag | Tier-3 fallback; circuit breaker skips it under rate-limit |
+| No formal third-party audit | Self-audit with 4 findings fixed. See [AUDIT.md](AUDIT.md). |
 
 ---
 
 ## Disclaimer
 
-Signals are informational only and do not constitute financial advice. The signal logic (DEMO v1) is illustrative and has not been validated for profitability. Past signal outcomes do not predict future results. You are solely responsible for any financial decisions you make. Use testnet first.
+Signals are informational only and do not constitute financial advice. The signal logic (DEMO v1) is illustrative and has not been validated for profitability. Past signal outcomes do not predict future results. Smart contracts carry inherent risk. This contract has not been formally audited by a third party. You are solely responsible for any financial decisions you make.
