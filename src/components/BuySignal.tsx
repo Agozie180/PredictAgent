@@ -8,7 +8,8 @@ import { SUPPORTED_TOKENS, formatUsdc, parseOnchainError } from '../lib/utils'
 import { buildTxExplorerUrl, getUsdc } from '@/onchain-facts'
 import { SignalPreview } from './SignalPreview'
 import { TokenIcon } from './TokenIcon'
-import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Wallet, Zap, ChevronRight, ExternalLink } from 'lucide-react'
+import { ConnectKitButton } from 'connectkit'
+import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Wallet, Zap, ChevronRight, ExternalLink, ShieldCheck } from 'lucide-react'
 
 const ARC_CHAIN_ID = arc.id
 const USDC_ADDRESS = getUsdc(ARC_CHAIN_ID)?.address as `0x${string}`
@@ -89,11 +90,57 @@ export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onVie
   if (!isConnected) return (
     <div className="flex flex-col gap-4">
       <BackButton onClick={onBack} />
-      <div className="rounded-2xl p-12 text-center flex flex-col items-center gap-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-          <Wallet size={22} style={{ color: 'var(--accent)' }} />
+      <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        {/* Header */}
+        <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
+          <h2 className="display text-xl font-bold mb-1" style={{ color: 'var(--ink)', letterSpacing: '-0.04em' }}>Buy a Signal</h2>
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>Connect your wallet to pay $1.00 USDC and request a price-movement signal.</p>
         </div>
-        <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>Connect your wallet to buy a signal</p>
+        <div className="p-6 flex flex-col gap-5">
+          {/* Network + fee */}
+          <div className="rounded-xl p-4 flex flex-col gap-2.5" style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}>
+            <div className="flex justify-between items-center text-sm">
+              <span style={{ color: 'var(--subtle)' }}>Network</span>
+              <div className="flex items-center gap-1.5 font-semibold" style={{ color: 'var(--gold)' }}>
+                <Zap size={12} /> Arc mainnet
+              </div>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span style={{ color: 'var(--subtle)' }}>Signal fee</span>
+              <span className="font-bold" style={{ color: 'var(--accent)' }}>$1.00 USDC</span>
+            </div>
+          </div>
+          {/* Steps */}
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)' }}>How it works</p>
+            {[
+              { n: '1', label: 'Approve USDC', sub: 'Allow the contract to spend $1.00 from your wallet' },
+              { n: '2', label: 'Pay & request', sub: 'Submit the signal request — fee is held in escrow' },
+              { n: '3', label: 'Seller commits', sub: 'Seller locks in their prediction on-chain before the window opens' },
+              { n: '4', label: 'Reveal & settle', sub: 'Signal is verified — correct prediction releases payment, wrong one refunds you' },
+            ].map(s => (
+              <div key={s.n} className="flex items-start gap-3 rounded-xl px-4 py-3" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)' }}>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold mt-0.5"
+                  style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid rgba(172,198,233,0.3)' }}>
+                  {s.n}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{s.label}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{s.sub}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Security note */}
+          <div className="flex items-start gap-2.5 rounded-xl px-4 py-3 text-xs" style={{ background: 'rgba(110,201,138,0.06)', border: '1px solid rgba(110,201,138,0.18)', color: 'var(--success)' }}>
+            <ShieldCheck size={13} className="mt-0.5 shrink-0" />
+            If the seller never reveals, you get a full refund — the contract enforces it.
+          </div>
+          {/* Connect button */}
+          <div className="flex justify-center">
+            <ConnectKitButton label="Connect Wallet to Continue" />
+          </div>
+        </div>
       </div>
     </div>
   )

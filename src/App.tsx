@@ -10,7 +10,7 @@ import { RequestDetail } from './components/RequestDetail'
 import { BacktestPanel } from './components/BacktestPanel'
 import { LandingPage } from './components/LandingPage'
 import { ErrorToastProvider } from './components/ErrorToast'
-import { BarChart2, ShoppingCart, Search, Zap, FlaskConical, Home } from 'lucide-react'
+import { BarChart2, ShoppingCart, Search, Zap, FlaskConical, Home, Copy, Check } from 'lucide-react'
 
 type View = 'home' | 'feed' | 'buy' | 'detail' | 'backtest'
 
@@ -21,6 +21,50 @@ const TABS = [
   { id: 'buy' as View,      label: 'Buy Signal',     icon: ShoppingCart },
   { id: 'detail' as View,   label: 'Track Request',  icon: Search },
 ]
+
+const API_BASE = 'https://predictagent.onrender.com'
+const API_ENDPOINTS = [
+  { method: 'GET', path: '/api/health' },
+  { method: 'GET', path: '/api/prices' },
+  { method: 'GET', path: '/api/signal/latest?token=BTC' },
+  { method: 'GET', path: '/api/signal/backtest?token=BTC&limit=200' },
+  { method: 'POST', path: '/api/signal/commit' },
+]
+
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={() => { void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600) }) }}
+      title="Copy URL"
+      className="shrink-0 p-0.5 rounded transition-all hover:opacity-70"
+      style={{ color: copied ? 'var(--success)' : 'var(--subtle)' }}
+    >
+      {copied ? <Check size={10} /> : <Copy size={10} />}
+    </button>
+  )
+}
+
+function AgentApiPanel() {
+  return (
+    <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
+      <p className="text-[10px] font-semibold mb-1.5 px-1" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
+        AGENT API
+      </p>
+      <div className="rounded-lg px-2 py-1.5 mb-2 flex items-center justify-between gap-1" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)' }}>
+        <span className="mono text-[9px] truncate" style={{ color: 'var(--ink-2)' }}>{API_BASE}</span>
+        <CopyBtn text={API_BASE} />
+      </div>
+      {API_ENDPOINTS.map(e => (
+        <div key={e.path} className="flex items-start gap-1.5 mb-1.5 px-1 group">
+          <span className="mono text-[9px] font-bold shrink-0 mt-0.5 w-7" style={{ color: e.method === 'POST' ? 'var(--gold)' : 'var(--accent)' }}>{e.method}</span>
+          <span className="mono text-[9px] break-all leading-relaxed flex-1" style={{ color: 'var(--subtle)' }}>{e.path}</span>
+          <CopyBtn text={`${API_BASE}${e.path}`} />
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function App() {
   const [view, setView] = useState<View>('home')
@@ -95,22 +139,8 @@ export default function App() {
                     )
                   })}
 
-                  {/* Agent API quick-ref */}
-                  <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-                    <p className="text-[10px] font-semibold mb-2 px-1" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
-                      AGENT API
-                    </p>
-                    {[
-                      { method: 'GET', path: '/api/signal/latest?token=BTC' },
-                      { method: 'GET', path: '/api/signal/:requestId' },
-                      { method: 'GET', path: '/api/health' },
-                    ].map(e => (
-                      <div key={e.path} className="flex items-start gap-1.5 mb-1.5 px-1">
-                        <span className="mono text-[9px] font-bold shrink-0 mt-0.5" style={{ color: 'var(--accent)' }}>{e.method}</span>
-                        <span className="mono text-[9px] break-all leading-relaxed" style={{ color: 'var(--subtle)' }}>{e.path}</span>
-                      </div>
-                    ))}
-                  </div>
+                  {/* Agent API panel */}
+                  <AgentApiPanel />
 
                   {/* Mainnet badge */}
                   <div className="flex items-center gap-1.5 mt-4 px-1">

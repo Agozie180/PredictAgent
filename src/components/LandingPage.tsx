@@ -28,7 +28,7 @@ const FAQS = [
   },
   {
     q: 'Is the signal logic profitable?',
-    a: 'No — and we are explicit about that. The current signal engine (DEMO v1) uses RSI, EMA crossover, MACD, Bollinger Bands, volume ratio, and 24h momentum. Backtests show 44–52% directional accuracy depending on the token and timeframe. This is illustrative, not a trading strategy. The value of the system is the trustless commitment and payment mechanism, not the current signal quality.',
+    a: 'No — and we are explicit about that. The signal engine uses a v1 heuristic model: RSI(14), EMA(20/50) crossover, MACD(12/26/9), Bollinger Bands, volume ratio, and 24h momentum. Backtests show 44–52% directional accuracy depending on the token and timeframe. This is illustrative, not a trading strategy. The value of the system is the trustless commitment and payment mechanism, not the current signal quality.',
   },
   {
     q: 'How does a buyer agent integrate programmatically?',

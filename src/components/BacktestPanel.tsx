@@ -30,6 +30,20 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
+interface BacktestSplit {
+  windowCount: number
+  wins: number
+  losses: number
+  winRate: number
+  bandHitRate: number
+  avgStrength: number
+  avgForwardReturn: number
+  bullishCount: number
+  bearishCount: number
+  strongSignalWinRate: number
+  weakSignalWinRate: number
+}
+
 interface BacktestResult {
   token: string
   windowCount: number
@@ -44,6 +58,8 @@ interface BacktestResult {
   bearishCount: number
   strongSignalWinRate: number
   weakSignalWinRate: number
+  inSample?: BacktestSplit
+  outOfSample?: BacktestSplit
   candles: number
   disclaimer: string
   warning: string
@@ -61,6 +77,30 @@ function WinBar({ rate, label, color }: { rate: number; label: string; color: st
       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
         <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
       </div>
+    </div>
+  )
+}
+
+function SplitSection({ split, label, accent }: { split: BacktestSplit; label: string; accent: string }) {
+  const winColor = split.winRate >= 0.6 ? 'var(--success)' : split.winRate >= 0.5 ? 'var(--gold)' : 'var(--danger)'
+  return (
+    <div className="rounded-xl p-3.5 flex flex-col gap-2.5" style={{ background: 'var(--surface-raised)', border: `1px solid ${accent}` }}>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: accent }}>{label}</span>
+        <div className="flex items-center gap-3 text-xs tabular-nums">
+          <span style={{ color: 'var(--muted)' }}>{split.windowCount} signals</span>
+          <span className="font-black" style={{ color: winColor }}>{Math.round(split.winRate * 100)}% dir</span>
+          <span style={{ color: 'var(--accent)' }}>{Math.round(split.bandHitRate * 100)}% band</span>
+        </div>
+      </div>
+      <WinBar rate={split.winRate} label="Directional accuracy" color={winColor} />
+      <WinBar rate={split.bandHitRate} label="Band hit rate" color="var(--accent)" />
+      {split.windowCount > 0 && (
+        <div className="grid grid-cols-2 gap-1.5">
+          <WinBar rate={split.strongSignalWinRate} label="Strong (score ≥65)" color="var(--success)" />
+          <WinBar rate={split.weakSignalWinRate} label="Weak (score <65)" color="var(--muted)" />
+        </div>
+      )}
     </div>
   )
 }
@@ -89,26 +129,32 @@ function TokenCard({ result }: { result: BacktestResult }) {
           <div className="text-2xl font-black tabular-nums" style={{ color: winColor, fontVariantNumeric: 'tabular-nums' }}>
             {Math.round(result.winRate * 100)}%
           </div>
-          <div className="text-[10px]" style={{ color: 'var(--subtle)' }}>directional</div>
+          <div className="text-[10px]" style={{ color: 'var(--subtle)' }}>overall</div>
         </div>
       </div>
 
-      {/* Win bars */}
-      <div className="flex flex-col gap-2.5">
-        <WinBar rate={result.winRate} label="Directional accuracy (strict)" color={winColor} />
-        <WinBar rate={result.bandHitRate} label="Target band hit rate (loose)" color="var(--accent)" />
-        {result.windowCount > 0 && (
-          <>
-            <WinBar rate={result.strongSignalWinRate} label="Strong signals (score ≥65) win rate" color="var(--success)" />
-            <WinBar rate={result.weakSignalWinRate} label="Weak signals (score <65) win rate" color="var(--muted)" />
-          </>
-        )}
-      </div>
+      {/* Out-of-sample split — shown first, more meaningful */}
+      {result.outOfSample && result.outOfSample.windowCount > 0 && (
+        <SplitSection
+          split={result.outOfSample}
+          label="Out-of-sample (last 30%)"
+          accent="rgba(172,198,233,0.5)"
+        />
+      )}
+
+      {/* In-sample split */}
+      {result.inSample && result.inSample.windowCount > 0 && (
+        <SplitSection
+          split={result.inSample}
+          label="In-sample (first 70%)"
+          accent="var(--border)"
+        />
+      )}
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: 'Windows', value: result.windowCount.toString() },
+          { label: 'Total signals', value: result.windowCount.toString() },
           { label: 'Wins', value: result.wins.toString(), color: 'var(--success)' },
           { label: 'Losses', value: result.losses.toString(), color: result.losses > 0 ? 'var(--danger)' : 'var(--subtle)' },
           { label: 'Candles', value: result.candles.toString() },

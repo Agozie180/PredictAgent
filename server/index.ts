@@ -25,20 +25,45 @@ const PORT = parseInt(process.env['PORT'] ?? '3001', 10)
 const STORE_PATH = join(import.meta.dir, '.signal-store.json')
 const SIGNAL_CACHE_TTL_MS = 10 * 60 * 1000  // 10 min
 
-// Contract address comes from env — same value the frontend uses
-const CONTRACT_ADDRESS = (process.env['VITE_CONTRACT_ADDRESS'] ?? '') as `0x${string}`
+// ── Required env vars — fail loudly on startup if missing ────────────────────
+//
+// Set these in Render: Dashboard → Your service → Environment
+//
+//   CONTRACT_ADDRESS   — PredictAgent contract address on Arc mainnet
+//                        e.g. 0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff
+//   SELLER_PRIVATE_KEY — Seller wallet private key (0x-prefixed, hex)
+//                        Used for automatic commitSignal() after RequestCreated
+//   ARC_RPC_URL        — Arc mainnet RPC endpoint
+//                        e.g. https://rpc.mainnet.arc.io  (public, no auth)
+//
+// Optional:
+//   PORT               — HTTP port (Render sets this automatically)
 
-// RPC: prefer the provisioned proxy; fall back to the public Arc mainnet RPC
-const RPC_PROXY_BASE = process.env['RPC_PROXY_BASE_URL']
-const RPC_PROXY_TOKEN = process.env['RPC_PROXY_TOKEN']
-const RPC_PROXY_CHAINS = process.env['RPC_PROXY_CHAINS'] ?? ''
-const ARC_CHAIN_ID_STR = '5042'
+const _CONTRACT_ADDRESS_RAW =
+  process.env['CONTRACT_ADDRESS'] ??
+  process.env['VITE_CONTRACT_ADDRESS'] ?? ''  // legacy fallback
+
+const SELLER_PRIVATE_KEY = process.env['SELLER_PRIVATE_KEY'] ?? ''
+const ARC_RPC_URL_ENV = process.env['ARC_RPC_URL'] ?? 'https://rpc.mainnet.arc.io' // arc-studio-allow-onchain-literal
+
+const STARTUP_ERRORS: string[] = []
+if (!_CONTRACT_ADDRESS_RAW) {
+  STARTUP_ERRORS.push('CONTRACT_ADDRESS is not set. Set it in Render → Environment to the deployed PredictAgent address.')
+}
+if (!SELLER_PRIVATE_KEY) {
+  STARTUP_ERRORS.push('SELLER_PRIVATE_KEY is not set. Set it in Render → Environment. The seller agent needs it to call commitSignal() on-chain.')
+}
+if (STARTUP_ERRORS.length > 0) {
+  console.error('\n[PredictAgent] FATAL — required env vars missing:')
+  for (const e of STARTUP_ERRORS) console.error(`  ✗ ${e}`)
+  console.error('\nSee README.md → "Signal service env vars" for the full list.\n')
+  process.exit(1)
+}
+
+const CONTRACT_ADDRESS = _CONTRACT_ADDRESS_RAW as `0x${string}`
+
 function buildRpcUrl(): string {
-  if (RPC_PROXY_BASE && RPC_PROXY_TOKEN && RPC_PROXY_CHAINS.includes(ARC_CHAIN_ID_STR)) {
-    return `${RPC_PROXY_BASE}/api/rpc/${ARC_CHAIN_ID_STR}?_rpc_token=${RPC_PROXY_TOKEN}`
-  }
-  // Public fallback — Arc mainnet
-  return process.env['ARC_RPC_URL'] ?? 'https://rpc.mainnet.arc.io' // arc-studio-allow-onchain-literal
+  return ARC_RPC_URL_ENV
 }
 
 // Minimal ABI fragment — only what we need to check payment status
@@ -454,8 +479,10 @@ Bun.serve({
 
 console.log(`[PredictAgent] Signal service v1 listening on http://localhost:${PORT}`)
 console.log(`[PredictAgent] Live on Arc mainnet · v1 heuristic model · Not financial advice.`)
-console.log(`[PredictAgent] Contract: ${CONTRACT_ADDRESS || '(VITE_CONTRACT_ADDRESS not set)'}`)
-console.log(`[PredictAgent] Persistence: ${STORE_PATH}`)
+console.log(`[PredictAgent] Contract : ${CONTRACT_ADDRESS}`)
+console.log(`[PredictAgent] RPC      : ${ARC_RPC_URL_ENV}`)
+console.log(`[PredictAgent] Seller PK: ${SELLER_PRIVATE_KEY ? '****' + SELLER_PRIVATE_KEY.slice(-4) : '(not set)'}`)
+console.log(`[PredictAgent] Store    : ${STORE_PATH}`)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

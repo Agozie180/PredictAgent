@@ -7,5 +7,11 @@
       "VITE_API_URL": "https://predictagent.onrender.com",
       "VITE_CONTRACT_ADDRESS": "0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://predictagent.onrender.com/api/:path*"
+    }
+  ]
 }
