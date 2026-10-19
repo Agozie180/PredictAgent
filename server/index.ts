@@ -332,13 +332,12 @@ Bun.serve({
           currentPriceUsd: spot
             ? `$${spot.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: spot.price >= 100 ? 2 : 6 })}`
             : null,
-          fee: '1.00',
-          feeCurrency: 'USDC',
+          feeNote: 'Read signalFeeUsdc() from the contract for the current fee.',
           contract: CONTRACT_ADDRESS || '(not configured)',
           chainId: 5042,
           locked: true,
           indicators: ['RSI (14)', 'EMA 20/50 crossover', 'MACD histogram', 'Bollinger Band position', 'Volume ratio', '24h price change'],
-          howToUnlock: 'Call requestSignal() on-chain with $1 USDC. After the seller commits, GET /signal/:requestId returns the full signal.',
+          howToUnlock: 'Call requestSignal() on-chain with $0.10 USDC. After the seller commits, GET /signal/:requestId returns the full signal.',
         })
       } catch {
         return json({ error: 'Market data temporarily unavailable. Please retry.' }, 503)
@@ -364,7 +363,7 @@ Bun.serve({
           error: 'Signal not yet committed. The seller will commit before the window opens.',
           status: 'PENDING',
           requestId: requestIdStr,
-          fee: '1.00',
+          feeNote: 'Read signalFeeUsdc() from the contract for the current fee.',
           contract: CONTRACT_ADDRESS || '(not configured)',
           chainId: 5042,
         }, 402)

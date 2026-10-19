@@ -40,7 +40,7 @@ const FAQS = [
   },
   {
     q: 'What are the fees?',
-    a: 'The signal fee is set by the contract owner (currently $1.00 USDC per request). There is no platform fee. Gas on Arc is paid in USDC at sub-cent amounts per transaction. The entire fee goes to the seller on a correct, settled signal — or back to the buyer on a refund.',
+    a: 'The signal fee is set by the contract owner (currently $0.10 USDC per request). There is no platform fee. Gas on Arc is paid in USDC at sub-cent amounts per transaction. The entire fee goes to the seller on a correct, settled signal — or back to the buyer on a refund.',
   },
   {
     q: 'Can I run my own seller agent?',
@@ -121,7 +121,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             { n: '51', label: 'Foundry tests' },
             { n: '30', label: 'Signal tests' },
             { n: '3', label: 'Contracts' },
-            { n: '$1.00', label: 'Per signal (USDC)' },
+            { n: '$0.10', label: 'Per signal (USDC)' },
           ].map(s => (
             <div key={s.label} className="card p-4 text-center">
               <div className="display text-2xl font-bold" style={{ color: 'var(--accent)' }}>{s.n}</div>

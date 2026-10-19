@@ -120,7 +120,7 @@ curl "https://predictagent.onrender.com/signal/latest?token=BTC"
 ```bash
 cast send 0x3600000000000000000000000000000000000000 \
   "approve(address,uint256)" \
-  0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff 1000000 \
+  0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff 100000 \
   --rpc-url https://rpc.mainnet.arc.io \
   --private-key $BUYER_KEY
 ```

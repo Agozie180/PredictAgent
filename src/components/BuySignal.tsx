@@ -94,7 +94,13 @@ export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onVie
         {/* Header */}
         <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="display text-xl font-bold mb-1" style={{ color: 'var(--ink)', letterSpacing: '-0.04em' }}>Buy a Signal</h2>
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>Connect your wallet to pay $1.00 USDC and request a price-movement signal.</p>
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>
+            Connect your wallet to pay{' '}
+            <span className="font-semibold" style={{ color: 'var(--accent)' }}>
+              {signalFeeUsdc > 0n ? `$${formatUsdc(signalFeeUsdc)} USDC` : '…'}
+            </span>{' '}
+            and request a price-movement signal.
+          </p>
         </div>
         <div className="p-6 flex flex-col gap-5">
           {/* Network + fee */}
@@ -107,14 +113,16 @@ export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onVie
             </div>
             <div className="flex justify-between items-center text-sm">
               <span style={{ color: 'var(--subtle)' }}>Signal fee</span>
-              <span className="font-bold" style={{ color: 'var(--accent)' }}>$1.00 USDC</span>
+              <span className="font-bold tabular-nums" style={{ color: 'var(--accent)' }}>
+                {signalFeeUsdc > 0n ? `$${formatUsdc(signalFeeUsdc)} USDC` : '…'}
+              </span>
             </div>
           </div>
           {/* Steps */}
           <div className="flex flex-col gap-2">
             <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)' }}>How it works</p>
             {[
-              { n: '1', label: 'Approve USDC', sub: 'Allow the contract to spend $1.00 from your wallet' },
+              { n: '1', label: 'Approve USDC', sub: `Allow the contract to spend ${signalFeeUsdc > 0n ? '$' + formatUsdc(signalFeeUsdc) : 'the signal fee'} from your wallet` },
               { n: '2', label: 'Pay & request', sub: 'Submit the signal request — fee is held in escrow' },
               { n: '3', label: 'Seller commits', sub: 'Seller locks in their prediction on-chain before the window opens' },
               { n: '4', label: 'Reveal & settle', sub: 'Signal is verified — correct prediction releases payment, wrong one refunds you' },

@@ -58,7 +58,7 @@ curl -s -X POST https://rpc.mainnet.arc.io \
 PredictAgent is an on-chain marketplace on **Arc mainnet** where:
 
 - A **seller agent** publishes short-term price-movement signals for BTC, ETH, SOL, ARB, POL
-- **Buyer agents or traders** pay a fixed $1.00 USDC fee per signal request
+- **Buyer agents or traders** pay a fixed $0.10 USDC fee per signal request
 - The **contract holds USDC in escrow** and settles automatically: pays the seller on correct reveal, refunds the buyer if the seller misses the deadline or the hash doesn't match
 - The **commit-reveal scheme** proves the seller fixed their prediction before the window opened — not after seeing the outcome
 
@@ -191,10 +191,10 @@ forge create contracts/PredictAgent.sol:PredictAgent \
   --broadcast \
   --rpc-url https://rpc.mainnet.arc.io \
   --private-key $DEPLOYER_PRIVATE_KEY \
-  --constructor-args $SELLER_ADDRESS 1000000 $OWNER_ADDRESS
+  --constructor-args $SELLER_ADDRESS 100000 $OWNER_ADDRESS
 ```
 
-Constructor: `(_seller, _signalFeeUsdc, _initialOwner)`. Fee `1000000` = $1.00 USDC (6 decimals).
+Constructor: `(_seller, _signalFeeUsdc, _initialOwner)`. Fee `100000` = $0.10 USDC (6 decimals).
 
 ---
 
@@ -203,7 +203,7 @@ Constructor: `(_seller, _signalFeeUsdc, _initialOwner)`. Fee `1000000` = $1.00 U
 ```bash
 # 1. Buyer approves USDC spend
 cast send 0x3600000000000000000000000000000000000000 \
-  "approve(address,uint256)" $CONTRACT 1000000 \
+  "approve(address,uint256)" $CONTRACT 100000 \
   --rpc-url https://rpc.mainnet.arc.io --private-key $BUYER_KEY
 
 # 2. Buyer requests signal (4h window starting in 5 min)

@@ -6,7 +6,7 @@ const DEPLOY_CMD = `forge create contracts/PredictAgent.sol:PredictAgent \\
   --private-key $DEPLOYER_PRIVATE_KEY \\
   --constructor-args \\
     $SELLER_ADDRESS \\
-    1000000 \\
+    100000 \\
     $OWNER_ADDRESS`
 
 const ENV_CMD = `printf 'VITE_CONTRACT_ADDRESS=0xYOUR_DEPLOYED\\n' >> .env`
@@ -69,7 +69,7 @@ export function ContractNotDeployed() {
         <p className="mt-2 text-xs" style={{ color: 'var(--subtle)' }}>
           Set <span className="mono">$SELLER_ADDRESS</span> to your signal service wallet,{' '}
           <span className="mono">$OWNER_ADDRESS</span> to your deployer.{' '}
-          <span className="mono">1000000</span> = $1.00 USDC fee (6 decimals).
+          <span className="mono">100000</span> = $0.10 USDC fee (6 decimals).
         </p>
       </div>
 
