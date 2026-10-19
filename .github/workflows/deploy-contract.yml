@@ -51,36 +51,38 @@ jobs:
       - name: Build contracts
         run: forge build
 
+      # Secrets are injected via env: so their values never appear in the
+      # rendered YAML and are masked in the step log by GitHub.
       - name: Verify secrets are present
+        env:
+          _DEPLOYER_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          _OWNER_ADDR: ${{ secrets.OWNER_ADDRESS }}
+          _SELLER_ADDR: ${{ secrets.SELLER_ADDRESS }}
         run: |
-          if [ -z "${{ secrets.DEPLOYER_PRIVATE_KEY }}" ]; then
-            echo "❌ DEPLOYER_PRIVATE_KEY secret is not set"
-            exit 1
-          fi
-          if [ -z "${{ secrets.OWNER_ADDRESS }}" ]; then
-            echo "❌ OWNER_ADDRESS secret is not set"
-            exit 1
-          fi
-          if [ -z "${{ secrets.SELLER_ADDRESS }}" ]; then
-            echo "❌ SELLER_ADDRESS secret is not set"
-            exit 1
-          fi
+          MISSING=0
+          [ -z "$_DEPLOYER_KEY" ] && echo "❌ DEPLOYER_PRIVATE_KEY is not set" && MISSING=1
+          [ -z "$_OWNER_ADDR"   ] && echo "❌ OWNER_ADDRESS is not set"        && MISSING=1
+          [ -z "$_SELLER_ADDR"  ] && echo "❌ SELLER_ADDRESS is not set"       && MISSING=1
+          [ "$MISSING" -eq 1 ] && exit 1
           echo "✅ All required secrets present"
 
       - name: Dry run — ABI check only
-        if: ${{ github.event.inputs.dry_run == 'true' }}
+        if: github.event.inputs.dry_run == 'true'
+        env:
+          OWNER_ADDRESS: ${{ secrets.OWNER_ADDRESS }}
+          SELLER_ADDRESS: ${{ secrets.SELLER_ADDRESS }}
         run: |
           echo "=== DRY RUN: contract builds and secrets are present ==="
-          echo "Contract:      ${{ github.event.inputs.contract }}"
-          echo "Fee (6-dec):   ${{ github.event.inputs.signal_fee_usdc }}"
-          echo "Owner:         ${{ secrets.OWNER_ADDRESS }}"
-          echo "Seller:        ${{ secrets.SELLER_ADDRESS }}"
+          echo "Contract:    ${{ github.event.inputs.contract }}"
+          echo "Fee (6-dec): ${{ github.event.inputs.signal_fee_usdc }}"
+          echo "Owner:       ${OWNER_ADDRESS}"
+          echo "Seller:      ${SELLER_ADDRESS}"
           echo "=== Would deploy to Arc mainnet (RPC: https://rpc.mainnet.arc.io) ==="
           forge inspect ${{ github.event.inputs.contract }} abi | head -5
           echo "✅ Dry run complete — re-run with dry_run=false to broadcast"
 
       - name: Deploy contract
-        if: ${{ github.event.inputs.dry_run == 'false' }}
+        if: github.event.inputs.dry_run == 'false'
         id: deploy
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
@@ -94,7 +96,7 @@ jobs:
 
           # --no-color prevents ANSI escape codes from corrupting grep/awk output.
           # forge create broadcasts automatically when --private-key is given;
-          # --broadcast is a forge script flag and must not be passed here.
+          # --broadcast is a forge script flag and must not be used here.
           OUTPUT=$(forge create \
             "contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}" \
             --rpc-url https://rpc.mainnet.arc.io \
@@ -111,53 +113,68 @@ jobs:
             exit $EXIT_CODE
           fi
 
-          # Parse address and tx hash from clean (no-colour) output
+          # Use $NF (last field) — immune to field-count shifts from extra tokens
           CONTRACT_ADDRESS=$(echo "$OUTPUT" | grep "Deployed to:" | awk '{print $NF}')
-          TX_HASH=$(echo "$OUTPUT" | grep "Transaction hash:" | awk '{print $NF}')
+          TX_HASH=$(echo "$OUTPUT"         | grep "Transaction hash:" | awk '{print $NF}')
 
           if [ -z "$CONTRACT_ADDRESS" ]; then
             echo "❌ Could not extract contract address from forge output above"
             exit 1
           fi
 
-          echo "contract_address=${CONTRACT_ADDRESS}" >> $GITHUB_OUTPUT
-          echo "tx_hash=${TX_HASH}" >> $GITHUB_OUTPUT
+          echo "contract_address=${CONTRACT_ADDRESS}" >> "$GITHUB_OUTPUT"
+          echo "tx_hash=${TX_HASH}"                   >> "$GITHUB_OUTPUT"
           echo "✅ Deployed: ${CONTRACT_ADDRESS}"
           echo "TX: https://explorer.arc.io/tx/${TX_HASH}"
 
       - name: Write deployment record
-        if: ${{ github.event.inputs.dry_run == 'false' }}
+        if: github.event.inputs.dry_run == 'false'
+        env:
+          CONTRACT_ADDRESS: ${{ steps.deploy.outputs.contract_address }}
+          TX_HASH: ${{ steps.deploy.outputs.tx_hash }}
+          SELLER_ADDRESS: ${{ secrets.SELLER_ADDRESS }}
+          OWNER_ADDRESS: ${{ secrets.OWNER_ADDRESS }}
+          CONTRACT_NAME: ${{ github.event.inputs.contract }}
+          SIGNAL_FEE: ${{ github.event.inputs.signal_fee_usdc }}
         run: |
           mkdir -p contracts/contract-metadata
-          # Use printf to avoid heredoc indentation issues with leading spaces
+          DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # printf is whitespace-safe; heredoc indented in YAML gains leading spaces
           printf '{\n  "contract": "%s",\n  "address": "%s",\n  "txHash": "%s",\n  "chain": "Arc Mainnet",\n  "chainId": 5042,\n  "deployedAt": "%s",\n  "seller": "%s",\n  "owner": "%s",\n  "signalFeeUsdc": "%s",\n  "explorer": "https://explorer.arc.io/address/%s"\n}\n' \
-            "${{ github.event.inputs.contract }}" \
-            "${{ steps.deploy.outputs.contract_address }}" \
-            "${{ steps.deploy.outputs.tx_hash }}" \
-            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            "${{ secrets.SELLER_ADDRESS }}" \
-            "${{ secrets.OWNER_ADDRESS }}" \
-            "${{ github.event.inputs.signal_fee_usdc }}" \
-            "${{ steps.deploy.outputs.contract_address }}" \
-            > contracts/contract-metadata/${{ github.event.inputs.contract }}-mainnet.json
+            "$CONTRACT_NAME" \
+            "$CONTRACT_ADDRESS" \
+            "$TX_HASH" \
+            "$DEPLOYED_AT" \
+            "$SELLER_ADDRESS" \
+            "$OWNER_ADDRESS" \
+            "$SIGNAL_FEE" \
+            "$CONTRACT_ADDRESS" \
+            > "contracts/contract-metadata/${CONTRACT_NAME}-mainnet.json"
           echo "📄 Deployment record written"
-          cat contracts/contract-metadata/${{ github.event.inputs.contract }}-mainnet.json
+          cat "contracts/contract-metadata/${CONTRACT_NAME}-mainnet.json"
 
       - name: Update AGENTS.md with contract address
-        if: ${{ github.event.inputs.dry_run == 'false' }}
+        if: github.event.inputs.dry_run == 'false'
+        env:
+          CONTRACT_ADDRESS: ${{ steps.deploy.outputs.contract_address }}
+          TX_HASH: ${{ steps.deploy.outputs.tx_hash }}
+          CONTRACT_NAME: ${{ github.event.inputs.contract }}
+          SIGNAL_FEE: ${{ github.event.inputs.signal_fee_usdc }}
         run: |
           if [ -f AGENTS.md ]; then
-            echo "" >> AGENTS.md
-            echo "## Deployed: ${{ github.event.inputs.contract }}" >> AGENTS.md
-            echo "- Address: \`${{ steps.deploy.outputs.contract_address }}\`" >> AGENTS.md
-            echo "- TX: \`${{ steps.deploy.outputs.tx_hash }}\`" >> AGENTS.md
-            echo "- Chain: Arc Mainnet (5042)" >> AGENTS.md
-            echo "- Fee: ${{ github.event.inputs.signal_fee_usdc }} (6-decimal USDC)" >> AGENTS.md
-            echo "- Deployed: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> AGENTS.md
+            {
+              echo ""
+              echo "## Deployed: ${CONTRACT_NAME}"
+              echo "- Address: \`${CONTRACT_ADDRESS}\`"
+              echo "- TX: \`${TX_HASH}\`"
+              echo "- Chain: Arc Mainnet (5042)"
+              echo "- Fee: ${SIGNAL_FEE} (6-decimal USDC)"
+              echo "- Deployed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            } >> AGENTS.md
           fi
 
       - name: Commit deployment record
-        if: ${{ github.event.inputs.dry_run == 'false' }}
+        if: github.event.inputs.dry_run == 'false'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "deploy: ${{ github.event.inputs.contract }} to Arc mainnet @ ${{ steps.deploy.outputs.contract_address }}"
@@ -165,16 +182,23 @@ jobs:
           commit_author: "Agozie180 <chiagozieokafor180@gmail.com>"
 
       - name: Job summary
-        if: ${{ github.event.inputs.dry_run == 'false' }}
+        if: github.event.inputs.dry_run == 'false'
+        env:
+          CONTRACT_ADDRESS: ${{ steps.deploy.outputs.contract_address }}
+          TX_HASH: ${{ steps.deploy.outputs.tx_hash }}
+          SIGNAL_FEE: ${{ github.event.inputs.signal_fee_usdc }}
+          CONTRACT_NAME: ${{ github.event.inputs.contract }}
         run: |
-          echo "## Deployment complete 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Contract | ${{ github.event.inputs.contract }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Address | \`${{ steps.deploy.outputs.contract_address }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| TX | [${{ steps.deploy.outputs.tx_hash }}](https://explorer.arc.io/tx/${{ steps.deploy.outputs.tx_hash }}) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Explorer | [View contract](https://explorer.arc.io/address/${{ steps.deploy.outputs.contract_address }}) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Fee | ${{ github.event.inputs.signal_fee_usdc }} (6-dec USDC) |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Next: update VITE_CONTRACT_ADDRESS in Vercel and CONTRACT_ADDRESS in Render to \`${{ steps.deploy.outputs.contract_address }}\`." >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Deployment complete 🚀"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Contract | ${CONTRACT_NAME} |"
+            echo "| Address | \`${CONTRACT_ADDRESS}\` |"
+            echo "| TX | [${TX_HASH}](https://explorer.arc.io/tx/${TX_HASH}) |"
+            echo "| Explorer | [View contract](https://explorer.arc.io/address/${CONTRACT_ADDRESS}) |"
+            echo "| Fee | ${SIGNAL_FEE} (6-dec USDC) |"
+            echo ""
+            echo "Next: update \`VITE_CONTRACT_ADDRESS\` in Vercel and \`CONTRACT_ADDRESS\` in Render to \`${CONTRACT_ADDRESS}\`."
+          } >> "$GITHUB_STEP_SUMMARY"

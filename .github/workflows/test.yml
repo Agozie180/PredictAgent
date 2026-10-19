@@ -21,8 +21,16 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies (brings in @openzeppelin/contracts)
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -47,11 +55,20 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Run signal tests
-        run: bun test server/signal.test.ts
+        # Pattern-match so a file rename doesn't silently run zero tests
+        run: bun test --testPathPattern 'server/.*\.test\.ts'
 
   lint-typecheck:
     name: Lint + typecheck (frontend)
@@ -65,8 +82,16 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Lint + typecheck
         run: bash scripts/check.sh

@@ -106,7 +106,6 @@ function getClient() {
 
 /** Check on-chain: returns status 0=PENDING,1=COMMITTED,2+=REVEALED/SETTLED/REFUNDED or null on error */
 async function getOnChainStatus(requestId: bigint): Promise<{ status: number; buyer: string } | null> {
-  if (!CONTRACT_ADDRESS) return null
   try {
     const client = getClient()
     const req = await client.readContract({
@@ -299,7 +298,7 @@ Bun.serve({
         supportedTokens: SUPPORTED_TOKENS,
         cachedSignals: [...liveSignals.keys()],
         committedRequests: Object.keys(store.requestIndex).length,
-        contract: CONTRACT_ADDRESS || '(not configured)',
+        contract: CONTRACT_ADDRESS,
         chainId: 5042,
       })
     }
@@ -333,7 +332,7 @@ Bun.serve({
             ? `$${spot.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: spot.price >= 100 ? 2 : 6 })}`
             : null,
           feeNote: 'Read signalFeeUsdc() from the contract for the current fee.',
-          contract: CONTRACT_ADDRESS || '(not configured)',
+          contract: CONTRACT_ADDRESS,
           chainId: 5042,
           locked: true,
           indicators: ['RSI (14)', 'EMA 20/50 crossover', 'MACD histogram', 'Bollinger Band position', 'Volume ratio', '24h price change'],
@@ -354,7 +353,7 @@ Bun.serve({
       if (!onChain) {
         return json({
           error: `Request ${requestIdStr} not found on-chain. It may not exist yet.`,
-          contract: CONTRACT_ADDRESS || '(not configured)',
+          contract: CONTRACT_ADDRESS,
           chainId: 5042,
         }, 404)
       }
@@ -364,7 +363,7 @@ Bun.serve({
           status: 'PENDING',
           requestId: requestIdStr,
           feeNote: 'Read signalFeeUsdc() from the contract for the current fee.',
-          contract: CONTRACT_ADDRESS || '(not configured)',
+          contract: CONTRACT_ADDRESS,
           chainId: 5042,
         }, 402)
       }
