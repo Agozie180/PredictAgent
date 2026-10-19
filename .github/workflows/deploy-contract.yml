@@ -16,9 +16,9 @@ on:
           - PredictAgentChainlink
           - SellerRegistry
       signal_fee_usdc:
-        description: "Signal fee in USDC (6 decimals). 1000000 = $1.00"
+        description: "Signal fee in USDC (6 decimals). 100000 = $0.10"
         required: true
-        default: "1000000"
+        default: "100000"
       dry_run:
         description: "Dry run — build and verify ABI only, do not broadcast"
         required: false
@@ -30,7 +30,7 @@ jobs:
     name: Deploy ${{ github.event.inputs.contract }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # to write contract address back to repo
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,13 +50,11 @@ jobs:
 
       - name: Build contracts
         run: forge build
-        working-directory: .
 
       - name: Verify secrets are present
         run: |
           if [ -z "${{ secrets.DEPLOYER_PRIVATE_KEY }}" ]; then
             echo "❌ DEPLOYER_PRIVATE_KEY secret is not set"
-            echo "Go to Settings → Secrets and variables → Actions → New repository secret"
             exit 1
           fi
           if [ -z "${{ secrets.OWNER_ADDRESS }}" ]; then
@@ -92,22 +90,36 @@ jobs:
           SIGNAL_FEE: ${{ github.event.inputs.signal_fee_usdc }}
         run: |
           echo "Deploying ${CONTRACT_NAME} to Arc mainnet..."
-          set +e
           echo "Args: SELLER=${SELLER_ADDRESS} FEE=${SIGNAL_FEE} OWNER=${OWNER_ADDRESS}"
-          OUTPUT=$(forge create "contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}" --rpc-url https://rpc.mainnet.arc.io --private-key "${DEPLOYER_PRIVATE_KEY}" --broadcast --constructor-args "${SELLER_ADDRESS}" "${SIGNAL_FEE}" "${OWNER_ADDRESS}" 2>&1)
+
+          # --no-color prevents ANSI escape codes from corrupting grep/awk output.
+          # forge create broadcasts automatically when --private-key is given;
+          # --broadcast is a forge script flag and must not be passed here.
+          OUTPUT=$(forge create \
+            "contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}" \
+            --rpc-url https://rpc.mainnet.arc.io \
+            --private-key "${DEPLOYER_PRIVATE_KEY}" \
+            --constructor-args "${SELLER_ADDRESS}" "${SIGNAL_FEE}" "${OWNER_ADDRESS}" \
+            --no-color \
+            2>&1)
           EXIT_CODE=$?
-          set -e
+
           echo "$OUTPUT"
+
           if [ $EXIT_CODE -ne 0 ]; then
             echo "❌ forge create failed with exit code $EXIT_CODE"
             exit $EXIT_CODE
           fi
-          CONTRACT_ADDRESS=$(echo "$OUTPUT" | grep "Deployed to:" | awk '{print $3}')
-          TX_HASH=$(echo "$OUTPUT" | grep "Transaction hash:" | awk '{print $3}')
+
+          # Parse address and tx hash from clean (no-colour) output
+          CONTRACT_ADDRESS=$(echo "$OUTPUT" | grep "Deployed to:" | awk '{print $NF}')
+          TX_HASH=$(echo "$OUTPUT" | grep "Transaction hash:" | awk '{print $NF}')
+
           if [ -z "$CONTRACT_ADDRESS" ]; then
-            echo "❌ Could not extract contract address — forge output above"
+            echo "❌ Could not extract contract address from forge output above"
             exit 1
           fi
+
           echo "contract_address=${CONTRACT_ADDRESS}" >> $GITHUB_OUTPUT
           echo "tx_hash=${TX_HASH}" >> $GITHUB_OUTPUT
           echo "✅ Deployed: ${CONTRACT_ADDRESS}"
@@ -117,24 +129,23 @@ jobs:
         if: ${{ github.event.inputs.dry_run == 'false' }}
         run: |
           mkdir -p contracts/contract-metadata
-          cat > contracts/contract-metadata/${{ github.event.inputs.contract }}-mainnet.json << EOF
-          {
-            "contract": "${{ github.event.inputs.contract }}",
-            "address": "${{ steps.deploy.outputs.contract_address }}",
-            "txHash": "${{ steps.deploy.outputs.tx_hash }}",
-            "chain": "Arc Mainnet",
-            "chainId": 5042,
-            "deployedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "deployer": "${{ secrets.OWNER_ADDRESS }}",
-            "signalFeeUsdc": "${{ github.event.inputs.signal_fee_usdc }}"
-          }
-          EOF
+          # Use printf to avoid heredoc indentation issues with leading spaces
+          printf '{\n  "contract": "%s",\n  "address": "%s",\n  "txHash": "%s",\n  "chain": "Arc Mainnet",\n  "chainId": 5042,\n  "deployedAt": "%s",\n  "seller": "%s",\n  "owner": "%s",\n  "signalFeeUsdc": "%s",\n  "explorer": "https://explorer.arc.io/address/%s"\n}\n' \
+            "${{ github.event.inputs.contract }}" \
+            "${{ steps.deploy.outputs.contract_address }}" \
+            "${{ steps.deploy.outputs.tx_hash }}" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "${{ secrets.SELLER_ADDRESS }}" \
+            "${{ secrets.OWNER_ADDRESS }}" \
+            "${{ github.event.inputs.signal_fee_usdc }}" \
+            "${{ steps.deploy.outputs.contract_address }}" \
+            > contracts/contract-metadata/${{ github.event.inputs.contract }}-mainnet.json
           echo "📄 Deployment record written"
+          cat contracts/contract-metadata/${{ github.event.inputs.contract }}-mainnet.json
 
       - name: Update AGENTS.md with contract address
         if: ${{ github.event.inputs.dry_run == 'false' }}
         run: |
-          # Append to AGENTS.md if it exists
           if [ -f AGENTS.md ]; then
             echo "" >> AGENTS.md
             echo "## Deployed: ${{ github.event.inputs.contract }}" >> AGENTS.md
@@ -166,4 +177,4 @@ jobs:
           echo "| Explorer | [View contract](https://explorer.arc.io/address/${{ steps.deploy.outputs.contract_address }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| Fee | ${{ github.event.inputs.signal_fee_usdc }} (6-dec USDC) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Next: set \`VITE_CONTRACT_ADDRESS=${{ steps.deploy.outputs.contract_address }}\` in your Vercel environment variables." >> $GITHUB_STEP_SUMMARY
+          echo "Next: update VITE_CONTRACT_ADDRESS in Vercel and CONTRACT_ADDRESS in Render to \`${{ steps.deploy.outputs.contract_address }}\`." >> $GITHUB_STEP_SUMMARY
