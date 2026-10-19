@@ -150,9 +150,9 @@ export function computeSignal(token: string, candles: Candle[]): SignalOutput {
   const targetPrice = BigInt(Math.round(Math.max(targetPriceFloat, 0.000001) * 1_000_000))
 
   // ── Confidence band (dynamic, ATR-based) ──────────────────────────────
-  // Band = 1.5 × ATR as % of price, clamped to 300–2000 bps
-  const dynBps = Math.round((atrPct * 1.5) * 10_000)
-  const confidenceBandBps = BigInt(Math.max(300, Math.min(2000, dynBps)))
+  // Band = 1 × ATR as % of price, clamped to 50–300 bps (0.5%–3%)
+  const dynBps = Math.round(atrPct * 10_000)
+  const confidenceBandBps = BigInt(Math.max(50, Math.min(300, dynBps)))
 
   // ── Reasoning summary ─────────────────────────────────────────────────
   const alignedCount = votes.filter(v => (direction === 'BULLISH' ? v > 0 : v < 0)).length
@@ -218,43 +218,64 @@ export interface BacktestTrade {
   targetPrice: number
   bandPct: number
   strengthScore: number
-  /** true = price moved in signal direction before opposite band hit */
+  /** true = direction correct AND close at exit is inside confidence band */
+  win: boolean
+  /** true = direction correct (price moved toward target) */
   directionalWin: boolean
-  /** true = price touched target band within forward window */
+  /** true = close at exit touched target band */
   bandHit: boolean
   forwardReturn: number  // % price change over forward window
+  split: 'in_sample' | 'out_of_sample'
+}
+
+export interface BacktestSplit {
+  windowCount: number
+  wins: number
+  losses: number
+  winRate: number
+  bandHitRate: number
+  avgStrength: number
+  avgForwardReturn: number
+  bullishCount: number
+  bearishCount: number
+  strongSignalWinRate: number
+  weakSignalWinRate: number
 }
 
 export interface BacktestResult {
   token: string
   windowCount: number
-  wins: number               // directional wins
+  wins: number               // combined wins (direction AND band)
   losses: number
-  bandHits: number           // looser metric: target band touched
-  winRate: number            // directional accuracy (stricter)
-  bandHitRate: number        // band-hit rate (wider metric)
+  bandHits: number           // direction correct only
+  winRate: number            // combined win rate (direction AND band)
+  bandHitRate: number        // directional accuracy only
   avgStrength: number
-  avgForwardReturn: number   // mean % return when following signal
+  avgForwardReturn: number
   bullishCount: number
   bearishCount: number
-  strongSignalWinRate: number   // win rate when strengthScore >= 65
-  weakSignalWinRate: number     // win rate when strengthScore < 65
+  strongSignalWinRate: number
+  weakSignalWinRate: number
+  /** Walk-forward split: trained on first 70%, reported on last 30% */
+  inSample: BacktestSplit
+  outOfSample: BacktestSplit
   trades: BacktestTrade[]
   /** Stated as data only — not a profitability guarantee */
   disclaimer: string
 }
 
 /**
- * Runs computeSignal() over a sliding window and scores each signal two ways:
+ * Runs computeSignal() over a sliding window.
  *
- * 1. Directional win (strict): price moved in signal direction by at least
- *    half the ATR before moving against it by the full ATR.
- * 2. Band hit (loose): price touched the target band within `forwardBars` candles.
+ * Win definition (strict): direction correct AND the closing price of the
+ * exit candle is within the confidence band of the target price.
+ * This matches what the on-chain contract actually verifies.
  *
- * IMPORTANT: retrospective in-sample backtest. Look-ahead bias applies.
+ * Walk-forward split: candles are divided 70% in-sample / 30% out-of-sample.
+ * The in-sample trades are computed first so the OOS window is truly unseen.
+ *
+ * IMPORTANT: retrospective backtest. Look-ahead bias applies.
  * windowSize=60 (training), forwardBars=6 (evaluation), step=3 (stride).
- * A step=1 would double-count overlapping windows — step=3 balances coverage
- * and independence.
  */
 export function backtestSignal(
   token: string,
@@ -268,6 +289,9 @@ export function backtestSignal(
     throw new Error(`Need at least ${windowSize + forwardBars} candles, got ${candles.length}`)
   }
 
+  // Walk-forward split boundary
+  const splitIdx = Math.floor(candles.length * 0.7)
+
   const trades: BacktestTrade[] = []
 
   for (let i = MIN; i + forwardBars <= candles.length; i += step) {
@@ -280,26 +304,27 @@ export function backtestSignal(
     const entryPrice = candles[i - 1].close
     const target = Number(signal.targetPrice) / 1_000_000
     const bandPct = Number(signal.confidenceBandBps) / 10_000
-    const bandSize = entryPrice * bandPct
+    const bandSize = target * bandPct  // band is relative to target, not entry
 
     const future = candles.slice(i, Math.min(i + forwardBars, candles.length))
-    const exitPrice = future[future.length - 1]?.close ?? entryPrice
+    const exitCandle = future[future.length - 1]
+    const exitPrice = exitCandle?.close ?? entryPrice
     const forwardReturn = entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0
 
-    // Directional win: did price move toward target before moving away by a full band?
-    let directionalWin = false
-    let bandHit = false
-    for (const c of future) {
-      if (signal.direction === 'BULLISH') {
-        if (c.high >= target - bandSize) { bandHit = true }
-        if (c.high >= target) { directionalWin = true; break }
-        if (c.low < entryPrice - bandSize) break  // stopped out
-      } else {
-        if (c.low <= target + bandSize) { bandHit = true }
-        if (c.low <= target) { directionalWin = true; break }
-        if (c.high > entryPrice + bandSize) break  // stopped out
-      }
-    }
+    // Directional win: exit close moved toward target (strict direction check)
+    const directionalWin = signal.direction === 'BULLISH'
+      ? exitPrice > entryPrice
+      : exitPrice < entryPrice
+
+    // Band hit: exit close is within ±band of target price
+    const bandHit = exitCandle !== undefined
+      ? Math.abs(exitPrice - target) <= bandSize
+      : false
+
+    // Combined win: direction correct AND close inside band
+    const win = directionalWin && bandHit
+
+    const split: BacktestTrade['split'] = i < splitIdx ? 'in_sample' : 'out_of_sample'
 
     trades.push({
       index: i,
@@ -308,16 +333,39 @@ export function backtestSignal(
       targetPrice: target,
       bandPct: bandPct * 100,
       strengthScore: signal.strengthScore,
+      win,
       directionalWin,
       bandHit,
       forwardReturn: signal.direction === 'BULLISH' ? forwardReturn : -forwardReturn,
+      split,
     })
   }
 
-  const wins   = trades.filter(t => t.directionalWin).length
-  const losses = trades.length - wins
-  const bandHits = trades.filter(t => t.bandHit).length
+  function computeSplit(subset: BacktestTrade[]): BacktestSplit {
+    const wins = subset.filter(t => t.win).length
+    const bandHits = subset.filter(t => t.directionalWin).length
+    const strongTrades = subset.filter(t => t.strengthScore >= 65)
+    const weakTrades   = subset.filter(t => t.strengthScore < 65)
+    return {
+      windowCount: subset.length,
+      wins,
+      losses: subset.length - wins,
+      winRate: subset.length > 0 ? wins / subset.length : 0,
+      bandHitRate: subset.length > 0 ? bandHits / subset.length : 0,
+      avgStrength: subset.length > 0 ? subset.reduce((s, t) => s + t.strengthScore, 0) / subset.length : 0,
+      avgForwardReturn: subset.length > 0 ? subset.reduce((s, t) => s + t.forwardReturn, 0) / subset.length : 0,
+      bullishCount: subset.filter(t => t.direction === 'BULLISH').length,
+      bearishCount: subset.filter(t => t.direction === 'BEARISH').length,
+      strongSignalWinRate: strongTrades.length > 0 ? strongTrades.filter(t => t.win).length / strongTrades.length : 0,
+      weakSignalWinRate:   weakTrades.length > 0   ? weakTrades.filter(t => t.win).length / weakTrades.length : 0,
+    }
+  }
 
+  const inSampleTrades = trades.filter(t => t.split === 'in_sample')
+  const outOfSampleTrades = trades.filter(t => t.split === 'out_of_sample')
+
+  const wins = trades.filter(t => t.win).length
+  const bandHits = trades.filter(t => t.directionalWin).length
   const strongTrades = trades.filter(t => t.strengthScore >= 65)
   const weakTrades   = trades.filter(t => t.strengthScore < 65)
 
@@ -325,7 +373,7 @@ export function backtestSignal(
     token,
     windowCount: trades.length,
     wins,
-    losses,
+    losses: trades.length - wins,
     bandHits,
     winRate: trades.length > 0 ? wins / trades.length : 0,
     bandHitRate: trades.length > 0 ? bandHits / trades.length : 0,
@@ -333,10 +381,12 @@ export function backtestSignal(
     avgForwardReturn: trades.length > 0 ? trades.reduce((s, t) => s + t.forwardReturn, 0) / trades.length : 0,
     bullishCount: trades.filter(t => t.direction === 'BULLISH').length,
     bearishCount: trades.filter(t => t.direction === 'BEARISH').length,
-    strongSignalWinRate: strongTrades.length > 0 ? strongTrades.filter(t => t.directionalWin).length / strongTrades.length : 0,
-    weakSignalWinRate:   weakTrades.length > 0   ? weakTrades.filter(t => t.directionalWin).length / weakTrades.length : 0,
+    strongSignalWinRate: strongTrades.length > 0 ? strongTrades.filter(t => t.win).length / strongTrades.length : 0,
+    weakSignalWinRate:   weakTrades.length > 0   ? weakTrades.filter(t => t.win).length / weakTrades.length : 0,
+    inSample: computeSplit(inSampleTrades),
+    outOfSample: computeSplit(outOfSampleTrades),
     trades,
-    disclaimer: 'DEMO v1 retrospective in-sample backtest. Suffers from look-ahead bias. Does NOT predict future performance. Not financial advice.',
+    disclaimer: 'v1 heuristic model backtest. Win = direction correct AND close within confidence band. Out-of-sample = last 30% of candles. Not financial advice. Past results do not guarantee future outcomes.',
   }
 }
 

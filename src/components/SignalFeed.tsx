@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useContractInfo, useSellerReputation, useMultipleRequests, type SignalRequest } from '../hooks/usePredictAgent'
 import { formatUsdc, formatAddress, STATUS_LABELS, STATUS_COLORS, STATUS_BG, formatTimestamp, directionLabel, SUPPORTED_TOKENS } from '../lib/utils'
+import { buildAddressExplorerUrl } from '@/onchain-facts'
+import { arc } from 'viem/chains'
+import { PREDICT_AGENT_ADDRESS } from '../lib/predictAgentAbi'
 import { SignalPreview } from './SignalPreview'
 import { ExternalLink, TrendingUp, TrendingDown, Activity, ChevronRight, Zap, Award } from 'lucide-react'
 import { TokenIcon } from './TokenIcon'
@@ -211,15 +214,28 @@ export function SignalFeed({ onBuySignal }: { onBuySignal: () => void }) {
               <p className="tabular-nums font-bold" style={{ color: 'var(--danger)' }}>{refunded.toString()}</p>
             </div>
           </div>
-          <a
-            href={`https://explorer.arc.io/address/${sellerAddr}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs transition-opacity hover:opacity-70"
-            style={{ color: 'var(--accent)' }}
-          >
-            Explorer <ExternalLink size={11} />
-          </a>
+          <div className="flex flex-col gap-1">
+            <a
+              href={buildAddressExplorerUrl(arc.id, sellerAddr)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs transition-opacity hover:opacity-70"
+              style={{ color: 'var(--accent)' }}
+            >
+              Seller <ExternalLink size={11} />
+            </a>
+            {PREDICT_AGENT_ADDRESS && (
+              <a
+                href={buildAddressExplorerUrl(arc.id, PREDICT_AGENT_ADDRESS)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs transition-opacity hover:opacity-70"
+                style={{ color: 'var(--subtle)' }}
+              >
+                Contract <ExternalLink size={11} />
+              </a>
+            )}
+          </div>
         </div>
       )}
 
@@ -296,15 +312,26 @@ export function SignalFeed({ onBuySignal }: { onBuySignal: () => void }) {
             <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
               <BarChart2Icon />
             </div>
-            <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>No signal requests yet</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>No signals bought yet</p>
             <p className="text-xs" style={{ color: 'var(--subtle)' }}>Be the first to buy a signal and start the feed.</p>
             <button
               onClick={onBuySignal}
-              className="mt-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
-              style={{ background: 'var(--accent)', color: '#080f1a' }}
+              className="mt-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+              style={{ height: 44, background: 'var(--accent)', color: '#080f1a' }}
             >
               Buy first signal
             </button>
+            {PREDICT_AGENT_ADDRESS && (
+              <a
+                href={buildAddressExplorerUrl(arc.id, PREDICT_AGENT_ADDRESS)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-70"
+                style={{ color: 'var(--subtle)' }}
+              >
+                Contract on Arc Explorer <ExternalLink size={10} />
+              </a>
+            )}
           </div>
         )}
 

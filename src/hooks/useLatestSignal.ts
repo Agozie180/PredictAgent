@@ -16,7 +16,23 @@ export interface SignalReasoning {
   summary: string
 }
 
-export interface LatestSignal {
+/** Locked response from /signal/latest — indicator names + price only, no direction */
+export interface LockedSignal {
+  locked: true
+  token: string
+  currentPrice: number | null
+  currentPriceUsd: string | null
+  fee: string
+  feeCurrency: string
+  contract: string
+  chainId: number
+  indicators: string[]
+  howToUnlock: string
+}
+
+/** Full signal — only returned after on-chain payment confirmed */
+export interface FullSignal {
+  locked: false
   token: string
   direction: 'BULLISH' | 'BEARISH'
   strengthScore: number
@@ -28,10 +44,17 @@ export interface LatestSignal {
   requestId: string | null
 }
 
+export type LatestSignal = LockedSignal | FullSignal
+
 async function fetchLatestSignal(token: string): Promise<LatestSignal> {
   const res = await fetch(apiUrl(`/api/signal/latest?token=${token}`))
   if (!res.ok) throw new Error(`Signal fetch failed: ${res.status}`)
-  return (await res.json()) as LatestSignal
+  const data = await res.json() as Record<string, unknown>
+  // Backend always returns locked:true now; if it ever returns full signal mark locked:false
+  if (data['locked'] === false && 'direction' in data) {
+    return { locked: false, ...data } as FullSignal
+  }
+  return { locked: true, ...data } as LockedSignal
 }
 
 export function useLatestSignal(token: string) {

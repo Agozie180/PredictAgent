@@ -1,6 +1,6 @@
-import { useLatestSignal } from '../hooks/useLatestSignal'
+import { useLatestSignal, type LockedSignal, type FullSignal } from '../hooks/useLatestSignal'
 import { useSingleSpotPrice } from '../hooks/useSpotPrices'
-import { TrendingUp, TrendingDown, RefreshCw, AlertCircle, Zap } from 'lucide-react'
+import { TrendingUp, TrendingDown, RefreshCw, AlertCircle, Lock, Zap, ShieldCheck } from 'lucide-react'
 
 const STRENGTH_LABEL_COLOR: Record<string, string> = {
   STRONG: 'var(--success)',
@@ -43,37 +43,87 @@ function formatPrice(p: number): string {
   return p.toFixed(6)
 }
 
-export function SignalPreview({ token }: { token: string }) {
-  const { data: signal, isLoading, error, refetch, isFetching } = useLatestSignal(token)
+// ── Locked preview (pre-purchase) ────────────────────────────────────────────
+
+function LockedPreview({ signal, token }: { signal: LockedSignal; token: string }) {
   const { price: spot } = useSingleSpotPrice(token)
+  const displayPrice = spot?.price ?? signal.currentPrice
 
-  if (isLoading) {
-    return (
-      <div className="rounded-2xl p-5 flex flex-col gap-3 animate-pulse" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <div className="flex justify-between">
-          <div className="h-7 w-28 rounded-lg" style={{ background: 'var(--surface-strong)' }} />
-          <div className="h-5 w-16 rounded-lg" style={{ background: 'var(--surface-strong)' }} />
-        </div>
-        <div className="h-3 w-full rounded" style={{ background: 'var(--surface-muted)' }} />
-        <div className="h-3 w-3/4 rounded" style={{ background: 'var(--surface-muted)' }} />
-      </div>
-    )
-  }
-
-  if (error || !signal) {
-    return (
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      {/* Price header — always visible */}
       <div
-        className="rounded-2xl p-5 flex items-start gap-3 text-xs"
-        style={{ background: 'rgba(240,112,128,0.05)', border: '1px solid rgba(240,112,128,0.15)' }}
+        className="px-5 py-4 flex items-center justify-between gap-4"
+        style={{ background: 'var(--surface-muted)', borderBottom: '1px solid var(--border)' }}
       >
-        <AlertCircle size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--danger)' }} />
-        <span style={{ color: 'var(--muted)' }}>
-          Signal service offline — start the backend with <code className="mono mx-1 px-1 rounded" style={{ background: 'var(--surface-strong)' }}>bun run server</code> to see signal reasoning.
-        </span>
+        <div>
+          <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--subtle)', letterSpacing: '0.07em' }}>
+            {token} — CURRENT PRICE
+          </p>
+          {displayPrice !== null && displayPrice !== undefined ? (
+            <p className="display text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)', letterSpacing: '-0.04em' }}>
+              ${formatPrice(displayPrice)}
+            </p>
+          ) : (
+            <div className="h-7 w-28 rounded-lg animate-pulse" style={{ background: 'var(--surface-strong)' }} />
+          )}
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl" style={{ background: 'var(--accent-dim)', border: '1px solid rgba(172,198,233,0.2)' }}>
+          <Lock size={11} style={{ color: 'var(--accent)' }} />
+          <span className="text-xs font-bold" style={{ color: 'var(--accent)' }}>PAYWALLED</span>
+        </div>
       </div>
-    )
-  }
 
+      {/* Indicator list — names only, values hidden */}
+      <div className="px-5 py-2">
+        {signal.indicators.map(name => (
+          <div key={name} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+            <div className="flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full shrink-0" style={{ background: 'var(--border-strong)' }} />
+              <span className="text-xs" style={{ color: 'var(--subtle)' }}>{name}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Lock size={9} style={{ color: 'var(--subtle)' }} />
+              <span className="text-xs font-semibold" style={{ color: 'var(--subtle)' }}>hidden</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Paywall CTA */}
+      <div
+        className="px-5 py-4 flex flex-col gap-3"
+        style={{ background: 'rgba(172,198,233,0.04)', borderTop: '1px solid var(--border)' }}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: 'var(--accent-dim)' }}
+          >
+            <Lock size={16} style={{ color: 'var(--accent)' }} />
+          </div>
+          <div>
+            <p className="text-sm font-bold mb-0.5" style={{ color: 'var(--ink)' }}>
+              Pay ${signal.fee} {signal.feeCurrency} to reveal
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Direction, target price, confidence band, and all indicator values are revealed after payment.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--subtle)' }}>
+          <ShieldCheck size={12} style={{ color: 'var(--success)' }} />
+          Refunded on-chain automatically if the signal is wrong.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Full signal (post-purchase) ───────────────────────────────────────────────
+
+function FullSignalView({ signal, onRefetch, isFetching }: { signal: FullSignal; onRefetch: () => Promise<unknown>; isFetching: boolean }) {
+  const { price: spot } = useSingleSpotPrice(signal.token)
   const r = signal.reasoning
   const isBull = signal.direction === 'BULLISH'
   const dirColor = isBull ? 'var(--success)' : 'var(--danger)'
@@ -87,7 +137,7 @@ export function SignalPreview({ token }: { token: string }) {
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-      {/* ── Hero direction ─────────────────────────────────────────── */}
+      {/* Hero direction */}
       <div
         className="px-5 py-4 flex items-center justify-between gap-4"
         style={{ background: dirDim, borderBottom: '1px solid var(--border)' }}
@@ -128,7 +178,7 @@ export function SignalPreview({ token }: { token: string }) {
             </p>
           </div>
           <button
-            onClick={() => { void refetch() }}
+            onClick={() => { void onRefetch() }}
             disabled={isFetching}
             className="p-2 rounded-xl transition-all hover:opacity-70 disabled:opacity-30"
             style={{ background: 'var(--surface-raised)' }}
@@ -139,7 +189,7 @@ export function SignalPreview({ token }: { token: string }) {
         </div>
       </div>
 
-      {/* ── Target / current ───────────────────────────────────────── */}
+      {/* Target / band / current */}
       <div className="px-5 py-3 grid grid-cols-3 gap-4" style={{ borderBottom: '1px solid var(--border)' }}>
         <div>
           <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--subtle)', letterSpacing: '0.07em' }}>TARGET</p>
@@ -157,7 +207,7 @@ export function SignalPreview({ token }: { token: string }) {
         )}
       </div>
 
-      {/* ── Indicators ─────────────────────────────────────────────── */}
+      {/* Indicators */}
       <div className="px-5 py-2">
         <IndicatorRow
           label="RSI (14)"
@@ -195,13 +245,54 @@ export function SignalPreview({ token }: { token: string }) {
         <IndicatorRow label="ATR (volatility)" value={`${r.atrPct.toFixed(2)}%`} subtext="of price" bullish={null} />
       </div>
 
-      {/* ── Footer disclaimer ──────────────────────────────────────── */}
+      {/* Footer */}
       <div className="px-5 py-3 flex items-start gap-2" style={{ background: 'var(--surface-muted)' }}>
         <Zap size={11} className="mt-0.5 shrink-0" style={{ color: 'var(--gold)' }} />
         <p className="text-[10px] leading-relaxed" style={{ color: 'var(--subtle)' }}>
-          DEMO v1 — Reasoning shown pre-purchase for transparency. Committed signal is locked on-chain before the window opens, preventing manipulation.
+          Live on Arc mainnet · v1 heuristic model · Signal committed on-chain before the window opens, preventing post-hoc manipulation.
         </p>
       </div>
     </div>
   )
+}
+
+// ── Public export ─────────────────────────────────────────────────────────────
+
+export function SignalPreview({ token }: { token: string }) {
+  const { data: signal, isLoading, error, refetch, isFetching } = useLatestSignal(token)
+
+  if (isLoading) {
+    return (
+      <div className="rounded-2xl p-5 flex flex-col gap-3 animate-pulse" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div className="flex justify-between">
+          <div className="h-7 w-28 rounded-lg" style={{ background: 'var(--surface-strong)' }} />
+          <div className="h-5 w-16 rounded-lg" style={{ background: 'var(--surface-strong)' }} />
+        </div>
+        <div className="h-3 w-full rounded" style={{ background: 'var(--surface-muted)' }} />
+        <div className="h-3 w-3/4 rounded" style={{ background: 'var(--surface-muted)' }} />
+      </div>
+    )
+  }
+
+  if (error || !signal) {
+    return (
+      <div
+        className="rounded-2xl p-5 flex items-start gap-3 text-xs"
+        style={{ background: 'rgba(240,112,128,0.05)', border: '1px solid rgba(240,112,128,0.15)' }}
+      >
+        <AlertCircle size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--danger)' }} />
+        <span style={{ color: 'var(--muted)' }}>
+          Signal service offline. Start the backend with{' '}
+          <code className="mono mx-1 px-1 rounded" style={{ background: 'var(--surface-strong)' }}>bun run server</code>
+          to see signal data.
+        </span>
+      </div>
+    )
+  }
+
+  if (signal.locked) {
+    return <LockedPreview signal={signal} token={token} />
+  }
+
+  return <FullSignalView signal={signal} onRefetch={refetch} isFetching={isFetching} />
 }

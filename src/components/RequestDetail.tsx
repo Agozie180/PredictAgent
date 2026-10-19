@@ -2,22 +2,64 @@ import { useState, useMemo } from 'react'
 import { useRequest } from '../hooks/usePredictAgent'
 import { useCountdown } from '../hooks/useCountdown'
 import { formatUsdc, formatAddress, formatTimestamp, STATUS_LABELS, STATUS_COLORS, directionLabel } from '../lib/utils'
-import { ArrowLeft, Loader2, TrendingUp, TrendingDown, RefreshCw, Clock } from 'lucide-react'
+import { buildAddressExplorerUrl } from '@/onchain-facts'
+import { keccak256, encodePacked } from 'viem'
+import { arc } from 'viem/chains'
+import { ArrowLeft, Loader2, TrendingUp, TrendingDown, RefreshCw, Clock, ExternalLink, ShieldCheck, AlertCircle } from 'lucide-react'
 
+const ARC_EXPLORER = 'https://explorer.arc.io'
 const ZERO_HASH = '0x0000000000000000000000000000000000000000000000000000000000000000'
+
+function explorerAddr(addr: string) { return `${ARC_EXPLORER}/address/${addr}` }
+
+/** Recompute commit hash client-side — same encoding as the contract */
+function recomputeHash(
+  requestId: bigint,
+  direction: `0x${string}`,
+  targetPrice: bigint,
+  confidenceBandBps: bigint,
+  signalTimestamp: bigint,
+  nonce: bigint,
+): `0x${string}` {
+  return keccak256(
+    encodePacked(
+      ['uint256', 'bytes32', 'uint256', 'uint256', 'uint256', 'uint256'],
+      [requestId, direction, targetPrice, confidenceBandBps, signalTimestamp, nonce],
+    ),
+  )
+}
 
 export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void; initialRequestId?: string }) {
   const [inputId, setInputId] = useState(initialRequestId ?? '')
+  const [inputError, setInputError] = useState<string | null>(null)
   const [lookupId, setLookupId] = useState<bigint | undefined>(
-    initialRequestId && parseInt(initialRequestId, 10) > 0 ? BigInt(parseInt(initialRequestId, 10)) : undefined
+    initialRequestId && /^\d+$/.test(initialRequestId) && parseInt(initialRequestId, 10) > 0
+      ? BigInt(parseInt(initialRequestId, 10))
+      : undefined
   )
+  const [verifyResult, setVerifyResult] = useState<'match' | 'mismatch' | null>(null)
 
   const { request, isLoading, refetch } = useRequest(lookupId)
 
-  function handleLookup(e: React.FormEvent) {
-    e.preventDefault()
+  function handleInputChange(val: string) {
+    // Accept digits only
+    if (val !== '' && !/^\d+$/.test(val)) {
+      setInputError('Request ID must be a number')
+      return
+    }
+    setInputError(null)
+    setInputId(val)
+  }
+
+  function handleLookup(e?: React.FormEvent) {
+    e?.preventDefault()
+    if (!inputId) return
+    if (!/^\d+$/.test(inputId)) { setInputError('Request ID must be a number'); return }
     const n = parseInt(inputId, 10)
-    if (n > 0) setLookupId(BigInt(n))
+    if (n <= 0) { setInputError('Request ID must be a positive number'); return }
+    setInputError(null)
+    setVerifyResult(null)
+    setLookupId(BigInt(n))
   }
 
   const dirLabel = request?.revealedDirection && request.revealedDirection !== ZERO_HASH
@@ -33,38 +75,67 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
     return 'closed' as const
   }, [request, nowSecs])
 
+  /** Verify: recompute hash from revealed data and compare to stored commitHash */
+  function handleVerify() {
+    if (!request || !dirLabel || request.revealedNonce === 0n) return
+    const computed = recomputeHash(
+      request.requestId,
+      request.revealedDirection,
+      request.revealedTargetPrice,
+      request.revealedConfidenceBandBps,
+      request.revealedTimestamp,
+      request.revealedNonce,
+    )
+    setVerifyResult(computed.toLowerCase() === request.commitHash.toLowerCase() ? 'match' : 'mismatch')
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <button
         onClick={onBack}
-        className="flex items-center gap-2 text-sm transition-opacity hover:opacity-70"
+        className="flex items-center gap-2 text-sm transition-opacity hover:opacity-70 min-h-[44px] w-fit"
         style={{ color: 'var(--accent)' }}
       >
         <ArrowLeft size={16} /> Back to feed
       </button>
 
       <div className="rounded-2xl p-6 flex flex-col gap-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <h2 className="display text-lg font-semibold" style={{ color: 'var(--ink)' }}>Request Detail</h2>
+        <h2 className="display text-lg font-semibold" style={{ color: 'var(--ink)' }}>Track Request</h2>
 
         {/* Lookup form */}
-        <form onSubmit={handleLookup} className="flex gap-2">
-          <input
-            type="number"
-            min={1}
-            value={inputId}
-            onChange={e => setInputId(e.target.value)}
-            placeholder="Enter request ID…"
-            className="flex-1 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
-            style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)', color: 'var(--ink)' }}
-          />
-          <button
-            type="submit"
-            disabled={!inputId}
-            className="px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-40 transition-all hover:opacity-90"
-            style={{ background: 'var(--accent)', color: '#0d1b2f' }}
-          >
-            Look up
-          </button>
+        <form onSubmit={handleLookup} className="flex flex-col gap-1.5">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={inputId}
+              onChange={e => handleInputChange(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleLookup() } }}
+              placeholder="Enter request ID (e.g. 1)…"
+              className="flex-1 rounded-xl px-4 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
+              style={{
+                height: 44,
+                background: 'var(--surface-muted)',
+                border: `1px solid ${inputError ? 'rgba(240,112,128,0.5)' : 'var(--border)'}`,
+                color: 'var(--ink)',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => handleLookup()}
+              disabled={!inputId || !!inputError}
+              className="px-4 rounded-xl text-sm font-semibold disabled:opacity-40 transition-all hover:opacity-90 shrink-0"
+              style={{ height: 44, background: 'var(--accent)', color: '#0d1b2f' }}
+            >
+              Look up
+            </button>
+          </div>
+          {inputError && (
+            <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--danger)' }}>
+              <AlertCircle size={11} /> {inputError}
+            </p>
+          )}
         </form>
 
         {/* Loading */}
@@ -83,10 +154,7 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
                 <span className="display text-lg font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
                   #{request.requestId.toString()}
                 </span>
-                <span
-                  className="text-xs font-bold px-2 py-0.5 rounded"
-                  style={{ background: 'rgba(172,198,233,0.12)', color: 'var(--accent)' }}
-                >
+                <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: 'rgba(172,198,233,0.12)', color: 'var(--accent)' }}>
                   {request.tokenSymbol}
                 </span>
               </div>
@@ -99,7 +167,7 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
                 </span>
                 <button
                   onClick={() => { void refetch() }}
-                  className="p-1.5 rounded-lg transition-opacity hover:opacity-70"
+                  className="p-1.5 rounded-lg transition-opacity hover:opacity-70 min-h-[44px] min-w-[44px] flex items-center justify-center"
                   style={{ background: 'var(--surface-muted)', color: 'var(--muted)' }}
                 >
                   <RefreshCw size={14} />
@@ -107,16 +175,12 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
               </div>
             </div>
 
-            {/* Window phase indicator */}
+            {/* Window phase */}
             {windowPhase && (request.status === 0 || request.status === 1 || request.status === 2) && (
               <div
                 className="rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm font-semibold"
                 style={{
-                  background: windowPhase === 'open'
-                    ? 'rgba(141,216,159,0.1)'
-                    : windowPhase === 'before'
-                      ? 'rgba(172,198,233,0.08)'
-                      : 'rgba(255,255,255,0.04)',
+                  background: windowPhase === 'open' ? 'rgba(141,216,159,0.1)' : windowPhase === 'before' ? 'rgba(172,198,233,0.08)' : 'rgba(255,255,255,0.04)',
                   border: `1px solid ${windowPhase === 'open' ? 'rgba(141,216,159,0.25)' : 'var(--border)'}`,
                   color: windowPhase === 'open' ? 'var(--success)' : 'var(--muted)',
                 }}
@@ -128,20 +192,43 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
               </div>
             )}
 
-            {/* Fields */}
+            {/* Fields grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               {[
-                { label: 'BUYER', value: formatAddress(request.buyer), mono: true },
-                { label: 'VERIFIER', value: request.verifier !== '0x0000000000000000000000000000000000000000' ? formatAddress(request.verifier) : '(not set)', mono: true },
-                { label: 'WINDOW OPEN', value: formatTimestamp(request.windowOpen), mono: false },
+                {
+                  label: 'BUYER',
+                  value: formatAddress(request.buyer),
+                  mono: true,
+                  href: explorerAddr(request.buyer),
+                },
+                {
+                  label: 'VERIFIER',
+                  value: request.verifier !== '0x0000000000000000000000000000000000000000'
+                    ? formatAddress(request.verifier)
+                    : '(not set)',
+                  mono: true,
+                  href: request.verifier !== '0x0000000000000000000000000000000000000000' ? explorerAddr(request.verifier) : undefined,
+                },
+                { label: 'WINDOW OPEN',  value: formatTimestamp(request.windowOpen),  mono: false },
                 { label: 'WINDOW CLOSE', value: formatTimestamp(request.windowClose), mono: false },
-                { label: 'FEE PAID', value: `$${formatUsdc(request.feePaid)} USDC`, mono: false },
+                { label: 'FEE PAID',     value: `$${formatUsdc(request.feePaid)} USDC`, mono: false },
               ].map(f => (
                 <div key={f.label} className="rounded-xl p-3" style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}>
-                  <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
-                    {f.label}
-                  </p>
-                  <p className={`${f.mono ? 'mono' : ''} tabular-nums`} style={{ color: 'var(--ink-2)' }}>{f.value}</p>
+                  <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>{f.label}</p>
+                  {f.href ? (
+                    <a
+                      href={f.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 hover:opacity-70 transition-opacity"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      <span className={`${f.mono ? 'mono' : ''} tabular-nums text-sm`}>{f.value}</span>
+                      <ExternalLink size={10} />
+                    </a>
+                  ) : (
+                    <p className={`${f.mono ? 'mono' : ''} tabular-nums`} style={{ color: 'var(--ink-2)' }}>{f.value}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -149,27 +236,23 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
             {/* Commit hash */}
             {request.commitHash !== ZERO_HASH && (
               <div className="rounded-xl p-3" style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}>
-                <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
-                  COMMITMENT HASH
-                </p>
+                <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>COMMITMENT HASH</p>
                 <p className="mono text-xs break-all" style={{ color: 'var(--muted)' }}>{request.commitHash}</p>
+                <p className="text-[10px] mt-1.5" style={{ color: 'var(--subtle)' }}>
+                  This hash was submitted on-chain before the window opened, locking the signal direction in advance.
+                </p>
               </div>
             )}
 
             {/* Revealed signal */}
             {dirLabel && request.status >= 2 && (
               <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}>
-                <p className="text-[10px] font-semibold" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
-                  REVEALED SIGNAL
-                </p>
+                <p className="text-[10px] font-semibold" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>REVEALED SIGNAL</p>
                 <div className="flex items-center gap-3">
-                  <div className={dirLabel === 'BULLISH' ? 'text-green-400' : 'text-red-400'}>
+                  <div style={{ color: dirLabel === 'BULLISH' ? 'var(--success)' : 'var(--danger)' }}>
                     {dirLabel === 'BULLISH' ? <TrendingUp size={22} /> : <TrendingDown size={22} />}
                   </div>
-                  <span
-                    className="display text-xl font-bold"
-                    style={{ color: dirLabel === 'BULLISH' ? 'var(--success)' : 'var(--danger)' }}
-                  >
+                  <span className="display text-xl font-bold" style={{ color: dirLabel === 'BULLISH' ? 'var(--success)' : 'var(--danger)' }}>
                     {dirLabel}
                   </span>
                 </div>
@@ -190,6 +273,35 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
                   </div>
                 </div>
 
+                {/* Verify button — recomputes hash client-side from revealed data */}
+                {request.revealedNonce !== 0n && request.commitHash !== ZERO_HASH && (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={handleVerify}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all hover:opacity-80 min-h-[44px] w-fit"
+                      style={{ background: 'var(--surface-raised)', border: '1px solid var(--border-strong)', color: 'var(--ink)' }}
+                    >
+                      <ShieldCheck size={13} style={{ color: 'var(--accent)' }} />
+                      Verify commitment hash
+                    </button>
+                    {verifyResult && (
+                      <div
+                        className="rounded-xl px-4 py-3 flex items-start gap-2 text-xs"
+                        style={{
+                          background: verifyResult === 'match' ? 'rgba(110,201,138,0.08)' : 'rgba(240,112,128,0.08)',
+                          border: `1px solid ${verifyResult === 'match' ? 'rgba(110,201,138,0.25)' : 'rgba(240,112,128,0.25)'}`,
+                          color: verifyResult === 'match' ? 'var(--success)' : 'var(--danger)',
+                        }}
+                      >
+                        <ShieldCheck size={12} className="mt-0.5 shrink-0" />
+                        {verifyResult === 'match'
+                          ? 'Hash verified — the revealed signal matches the on-chain commitment exactly. The seller did not change the signal after committing.'
+                          : 'Hash mismatch — the revealed data does not match the on-chain commitment. This should not happen on a valid reveal.'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Outcome */}
                 {request.outcomeRecorded && (
                   <div
@@ -200,37 +312,54 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
                       border: `1px solid ${request.outcomeCorrect ? 'rgba(141,216,159,0.25)' : 'rgba(232,109,122,0.25)'}`,
                     }}
                   >
-                    Outcome: <strong>{request.outcomeCorrect ? 'Signal was CORRECT' : 'Signal was INCORRECT'}</strong>
-                    {' — '}
-                    {request.status === 3 ? 'Seller was paid.' : 'Buyer was refunded.'}
+                    Outcome: <strong>{request.outcomeCorrect ? 'Signal was CORRECT — seller was paid.' : 'Signal was INCORRECT — buyer was refunded.'}</strong>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Settlement tx link — shown when settled/refunded */}
+            {/* Settlement explorer links */}
             {(request.status === 3 || request.status === 4) && (
-              <p className="text-xs" style={{ color: 'var(--subtle)' }}>
-                Settlement recorded on-chain.{' '}
+              <div className="flex flex-wrap gap-3 text-xs">
                 <a
-                  href={`https://explorer.arc.io/address/${request.buyer}`}
+                  href={explorerAddr(request.buyer)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="transition-opacity hover:opacity-70"
+                  className="flex items-center gap-1.5 transition-opacity hover:opacity-70 min-h-[44px]"
                   style={{ color: 'var(--accent)' }}
                 >
-                  View buyer on explorer →
+                  View buyer on explorer <ExternalLink size={10} />
                 </a>
-              </p>
+                <a
+                  href={buildAddressExplorerUrl(arc.id, '0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff')}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 transition-opacity hover:opacity-70 min-h-[44px]"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  View contract on explorer <ExternalLink size={10} />
+                </a>
+              </div>
             )}
           </div>
         )}
 
         {/* No result */}
         {lookupId !== undefined && !isLoading && request?.requestId === undefined && (
-          <p className="text-sm py-4 text-center" style={{ color: 'var(--subtle)' }}>
-            No request found for ID #{lookupId.toString()}. Make sure the contract is deployed and the ID exists.
-          </p>
+          <div className="py-8 text-center flex flex-col items-center gap-3">
+            <p className="text-sm" style={{ color: 'var(--subtle)' }}>
+              No request found for ID #{lookupId.toString()}.
+            </p>
+            <a
+              href={buildAddressExplorerUrl(arc.id, '0xD64d1FD08e81bbF5aAa194a138d005AA4d4E75Ff')}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-70"
+              style={{ color: 'var(--accent)' }}
+            >
+              View contract on Arc Explorer <ExternalLink size={11} />
+            </a>
+          </div>
         )}
       </div>
     </div>

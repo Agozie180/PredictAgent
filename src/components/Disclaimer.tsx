@@ -12,8 +12,8 @@ export function Disclaimer() {
     >
       <Info size={13} className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
       <span>
-        <strong style={{ color: 'var(--ink-2)' }}>DEMO v1 — Informational only.</strong>{' '}
-        Signals are not financial advice. Past results do not guarantee future outcomes.
+        <strong style={{ color: 'var(--ink-2)' }}>Live on Arc mainnet · v1 heuristic model · Not financial advice.</strong>{' '}
+        Past results do not guarantee future outcomes.
         Signal logic uses public exchange data and is auditable in{' '}
         <span className="mono">server/signal.ts</span>.
       </span>

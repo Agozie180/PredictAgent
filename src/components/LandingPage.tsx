@@ -119,8 +119,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 max-w-2xl mx-auto">
           {[
             { n: '51', label: 'Foundry tests' },
+            { n: '30', label: 'Signal tests' },
             { n: '3', label: 'Contracts' },
-            { n: '1,764', label: 'Backtest signals' },
             { n: '$1.00', label: 'Per signal (USDC)' },
           ].map(s => (
             <div key={s.label} className="card p-4 text-center">
@@ -332,8 +332,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       {/* ── Disclaimer ────────────────────────────────────────────────── */}
       <section className="card p-5 text-xs leading-relaxed space-y-1" style={{ color: 'var(--subtle)', borderColor: 'var(--border)' }}>
         <p className="font-semibold uppercase tracking-widest text-[10px] mb-2" style={{ color: 'var(--muted)' }}>Disclaimer</p>
-        <p>PredictAgent is a DEMO v1 application. Signals are informational only and are NOT financial advice. Past signal performance does not guarantee future results. The signal logic is illustrative and has not been backtested for profitability. Do not make financial decisions based on these signals.</p>
-        <p>Smart contracts carry inherent risk. This contract has not been formally audited by a third party. Use only funds you can afford to lose. The contract is deployed on Arc mainnet — transactions are irreversible.</p>
+        <p>Signals are informational only and are NOT financial advice. The signal engine uses a v1 heuristic model (RSI, EMA, MACD, Bollinger, volume). Past signal performance does not guarantee future results. Backtests show 44–52% directional accuracy — treat this as a protocol demonstration, not a trading strategy.</p>
+        <p>Smart contracts carry inherent risk. This contract has not been formally audited by a third party. The security review is documented in <a href="https://github.com/Agozie180/PredictAgent/blob/main/AUDIT.md" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>AUDIT.md</a>. Use only funds you can afford to lose. The contract is deployed on Arc mainnet — transactions are irreversible.</p>
       </section>
 
       {/* ── CTA ───────────────────────────────────────────────────────── */}

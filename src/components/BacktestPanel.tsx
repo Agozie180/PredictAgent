@@ -6,9 +6,29 @@
  */
 import { useState } from 'react'
 import { apiUrl } from '@/api'
-import { AlertTriangle, RefreshCw, FlaskConical, TrendingUp, TrendingDown, Info } from 'lucide-react'
+import { AlertTriangle, RefreshCw, FlaskConical, TrendingUp, TrendingDown, Info, Copy, Check } from 'lucide-react'
 import { SUPPORTED_TOKENS } from '../lib/utils'
 import { TokenIcon } from './TokenIcon'
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  function handleCopy() {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    })
+  }
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy to clipboard"
+      className="absolute top-2 right-2 p-1.5 rounded-lg transition-all hover:opacity-80"
+      style={{ background: 'var(--surface-strong)', color: copied ? 'var(--success)' : 'var(--subtle)' }}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+    </button>
+  )
+}
 
 interface BacktestResult {
   token: string
@@ -169,7 +189,7 @@ export function BacktestPanel() {
           <div className="flex items-center gap-2.5 mb-1">
             <FlaskConical size={18} style={{ color: 'var(--accent)' }} />
             <h2 className="text-xl font-black" style={{ color: 'var(--ink)' }}>Signal Backtest</h2>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,200,80,0.15)', color: 'var(--gold)', border: '1px solid rgba(255,200,80,0.3)' }}>DEMO v1</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid rgba(172,198,233,0.3)' }}>v1 heuristic</span>
           </div>
           <p className="text-sm" style={{ color: 'var(--muted)' }}>
             Runs the signal engine over {candles} historical candles — Kraken → CoinGecko fallback.
@@ -204,7 +224,7 @@ export function BacktestPanel() {
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-opacity"
             style={{
               background: loading ? 'var(--surface-raised)' : 'var(--accent)',
-              color: loading ? 'var(--muted)' : '#fff',
+              color: loading ? 'var(--muted)' : '#080f1a',
               opacity: loading ? 0.7 : 1,
             }}
           >
@@ -282,11 +302,15 @@ export function BacktestPanel() {
         <div className="flex flex-col gap-3 text-sm" style={{ color: 'var(--ink-2)' }}>
           <div>
             <span className="font-semibold" style={{ color: 'var(--accent)' }}>1. Start the signal service:</span>
-            <pre className="mt-1 rounded-lg p-3 text-xs overflow-x-auto mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-2)' }}>bun run server</pre>
+            <div className="relative mt-1">
+              <pre className="rounded-lg p-3 pr-10 text-xs overflow-x-auto mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-2)' }}>bun run server</pre>
+              <CopyButton text="bun run server" />
+            </div>
           </div>
           <div>
             <span className="font-semibold" style={{ color: 'var(--accent)' }}>2. Hit the backtest endpoint:</span>
-            <pre className="mt-1 rounded-lg p-3 text-xs overflow-x-auto mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-2)' }}>
+            <div className="relative mt-1">
+              <pre className="rounded-lg p-3 pr-10 text-xs overflow-x-auto mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-2)' }}>
 {`# 1h candles (default):
 curl "https://predictagent.onrender.com/signal/backtest?token=BTC&limit=500"
 
@@ -298,7 +322,9 @@ curl "https://predictagent.onrender.com/signal/backtest?token=SOL&interval=720&l
 
 # 24h candles with full per-trade data:
 curl "https://predictagent.onrender.com/signal/backtest?token=ETH&interval=1440&limit=500&trades=true"`}
-            </pre>
+              </pre>
+              <CopyButton text={`curl "https://predictagent.onrender.com/signal/backtest?token=BTC&limit=500"`} />
+            </div>
           </div>
           <div>
             <span className="font-semibold" style={{ color: 'var(--accent)' }}>3. What each metric means:</span>
