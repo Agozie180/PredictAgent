@@ -63,7 +63,7 @@ export const STATUS_BG: Record<number, string> = {
   4: 'bg-red-400/10 border-red-400/20',
 }
 
-export const SUPPORTED_TOKENS = ['BTC', 'ETH', 'SOL', 'ARB', 'MATIC'] as const
+export const SUPPORTED_TOKENS = ['BTC', 'ETH', 'SOL', 'ARB', 'POL'] as const
 export type SupportedToken = (typeof SUPPORTED_TOKENS)[number]
 
 // bytes32 ASCII encoding: right-zero-padded, 32 bytes = 64 hex chars after 0x

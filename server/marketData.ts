@@ -20,7 +20,7 @@ const BINANCE_PAIRS: Record<string, string> = {
   ETH:  'ETHUSDT',
   SOL:  'SOLUSDT',
   ARB:  'ARBUSDT',
-  MATIC: 'MATICUSDT',
+  POL:  'POLUSDT',   // Polygon rebranded MATIC → POL in 2024; Binance uses POLUSDT
 }
 
 // Map token symbol → Kraken pair (fallback tier 2)
@@ -29,7 +29,7 @@ const KRAKEN_PAIRS: Record<string, string> = {
   ETH:  'ETHUSD',
   SOL:  'SOLUSD',
   ARB:  'ARBUSD',
-  MATIC: 'MATICUSD',
+  POL:  'POLUSD',    // Kraken lists POL (Polygon) as POLUSD
 }
 
 // Map token symbol → CoinGecko id (fallback tier 3)
@@ -38,7 +38,7 @@ const COINGECKO_IDS: Record<string, string> = {
   ETH:  'ethereum',
   SOL:  'solana',
   ARB:  'arbitrum',
-  MATIC: 'matic-network',
+  POL:  'matic-network', // CoinGecko still uses matic-network id for POL
 }
 
 export const SUPPORTED_TOKENS = Object.keys(BINANCE_PAIRS)
