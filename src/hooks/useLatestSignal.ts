@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiUrl } from '@/api'
 
 export interface SignalReasoning {
   rsi: number
@@ -28,7 +29,7 @@ export interface LatestSignal {
 }
 
 async function fetchLatestSignal(token: string): Promise<LatestSignal> {
-  const res = await fetch(`/api/signal/latest?token=${token}`)
+  const res = await fetch(apiUrl(`/api/signal/latest?token=${token}`))
   if (!res.ok) throw new Error(`Signal fetch failed: ${res.status}`)
   return (await res.json()) as LatestSignal
 }

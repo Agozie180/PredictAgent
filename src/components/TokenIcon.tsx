@@ -12,7 +12,7 @@ const ICONS: Record<string, React.FC<SVGProps<SVGSVGElement>>> = {
   ETH: NetworkEthereum,
   SOL: NetworkSolana,
   ARB: NetworkArbitrumOne,
-  MATIC: NetworkPolygon,
+  POL: NetworkPolygon,   // Polygon rebranded MATIC → POL in 2024
 }
 
 interface TokenIconProps extends SVGProps<SVGSVGElement> {

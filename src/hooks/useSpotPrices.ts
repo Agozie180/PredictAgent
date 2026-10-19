@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiUrl } from '@/api'
 
 export interface SpotPrice {
   token: string
@@ -11,7 +12,7 @@ export interface SpotPrice {
 }
 
 async function fetchSpotPrices(): Promise<SpotPrice[]> {
-  const res = await fetch('/api/prices')
+  const res = await fetch(apiUrl('/api/prices'))
   if (!res.ok) throw new Error(`Prices fetch failed: ${res.status}`)
   const data = (await res.json()) as { prices: SpotPrice[] }
   return data.prices
