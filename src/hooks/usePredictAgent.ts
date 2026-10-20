@@ -7,29 +7,36 @@ const CHAIN_ID = arc.id
 export function useContractInfo() {
   const addr = PREDICT_AGENT_ADDRESS
   const { data, isLoading } = useReadContracts({
+    // chainId at the batch level ensures reads always hit Arc mainnet,
+    // regardless of which chain the user's wallet is currently on.
     contracts: [
-      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'signalFeeUsdc', chainId: CHAIN_ID },
-      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'seller', chainId: CHAIN_ID },
-      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'nextRequestId', chainId: CHAIN_ID },
-      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'paused', chainId: CHAIN_ID },
-      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'revealDeadlineOffset', chainId: CHAIN_ID },
-      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'outcomeDeadlineOffset', chainId: CHAIN_ID },
-      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'minRevealOffset', chainId: CHAIN_ID },
-      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'maxRevealOffset', chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'signalFeeUsdc',          chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'seller',                  chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'nextRequestId',            chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'paused',                   chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'revealDeadlineOffset',     chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'outcomeDeadlineOffset',    chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'minRevealOffset',          chainId: CHAIN_ID },
+      { address: addr, abi: PREDICT_AGENT_ABI, functionName: 'maxRevealOffset',          chainId: CHAIN_ID },
     ],
     query: { enabled: !!addr, refetchInterval: 15_000 },
   })
 
+  // Raw result — undefined while loading, 0n only after a successful read that returned 0
+  const rawFee = data?.[0]?.result
+
   return {
     isLoading,
-    signalFeeUsdc: (data?.[0]?.result) ?? 0n,
-    sellerAddr: (data?.[1]?.result as string | undefined) ?? '',
-    nextRequestId: (data?.[2]?.result) ?? 1n,
-    paused: (data?.[3]?.result) ?? false,
-    revealDeadlineOffset: (data?.[4]?.result) ?? 3600n,
-    outcomeDeadlineOffset: (data?.[5]?.result) ?? 86400n,
-    minRevealOffset: (data?.[6]?.result) ?? 3600n,
-    maxRevealOffset: (data?.[7]?.result) ?? 172800n,
+    // isFeeLoaded: true once we have a real on-chain value (not the loading default)
+    isFeeLoaded: !isLoading && rawFee !== undefined,
+    signalFeeUsdc:          rawFee                                    ?? 0n,
+    sellerAddr:             (data?.[1]?.result as string | undefined) ?? '',
+    nextRequestId:          (data?.[2]?.result) ?? 1n,
+    paused:                 (data?.[3]?.result) ?? false,
+    revealDeadlineOffset:   (data?.[4]?.result) ?? 3600n,
+    outcomeDeadlineOffset:  (data?.[5]?.result) ?? 86400n,
+    minRevealOffset:        (data?.[6]?.result) ?? 3600n,
+    maxRevealOffset:        (data?.[7]?.result) ?? 172800n,
   }
 }
 

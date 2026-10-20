@@ -45,7 +45,7 @@ function formatPrice(p: number): string {
 
 // ── Locked preview (pre-purchase) ────────────────────────────────────────────
 
-function LockedPreview({ signal, token }: { signal: LockedSignal; token: string }) {
+function LockedPreview({ signal, token, contractFee }: { signal: LockedSignal; token: string; contractFee?: string }) {
   const { price: spot } = useSingleSpotPrice(token)
   const displayPrice = spot?.price ?? signal.currentPrice
 
@@ -104,7 +104,7 @@ function LockedPreview({ signal, token }: { signal: LockedSignal; token: string 
           </div>
           <div>
             <p className="text-sm font-bold mb-0.5" style={{ color: 'var(--ink)' }}>
-              Pay ${signal.fee} {signal.feeCurrency} to reveal
+              Pay ${contractFee ?? signal.fee} {signal.feeCurrency} to reveal
             </p>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
               Direction, target price, confidence band, and all indicator values are revealed after payment.
@@ -258,7 +258,7 @@ function FullSignalView({ signal, onRefetch, isFetching }: { signal: FullSignal;
 
 // ── Public export ─────────────────────────────────────────────────────────────
 
-export function SignalPreview({ token }: { token: string }) {
+export function SignalPreview({ token, contractFee }: { token: string; contractFee?: string }) {
   const { data: signal, isLoading, error, refetch, isFetching } = useLatestSignal(token)
 
   if (isLoading) {
@@ -291,7 +291,7 @@ export function SignalPreview({ token }: { token: string }) {
   }
 
   if (signal.locked) {
-    return <LockedPreview signal={signal} token={token} />
+    return <LockedPreview signal={signal} token={token} contractFee={contractFee} />
   }
 
   return <FullSignalView signal={signal} onRefetch={refetch} isFetching={isFetching} />

@@ -24,7 +24,7 @@ const WINDOW_OPTIONS = [
 export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onViewRequest?: (id: string) => void }) {
   const { address, isConnected, chainId } = useAccount()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
-  const { signalFeeUsdc, paused } = useContractInfo()
+  const { signalFeeUsdc, isFeeLoaded, paused } = useContractInfo()
 
   const { data: usdcBalance } = useReadContract({
     address: USDC_ADDRESS,
@@ -32,9 +32,11 @@ export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onVie
     functionName: 'balanceOf',
     args: [address ?? '0x0000000000000000000000000000000000000000'],
     chainId: ARC_CHAIN_ID,
-    query: { enabled: !!address && isConnected },
+    // Only run when we have both a valid USDC address and a connected wallet
+    query: { enabled: !!USDC_ADDRESS && !!address && isConnected, refetchInterval: 15_000 },
   })
-  const hasEnoughUsdc = usdcBalance !== undefined && usdcBalance >= signalFeeUsdc
+  // Only gate on balance once we know the real fee — avoids false "insufficient" while loading
+  const hasEnoughUsdc = isFeeLoaded && usdcBalance !== undefined && usdcBalance >= signalFeeUsdc
 
   const [token, setToken] = useState<string>('BTC')
   const [windowDurationHrs, setWindowDurationHrs] = useState(4)
@@ -240,7 +242,12 @@ export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onVie
         <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="display text-xl font-bold mb-1" style={{ color: 'var(--ink)', letterSpacing: '-0.04em' }}>Buy a Signal</h2>
           <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            Pay <span className="font-semibold tabular-nums" style={{ color: 'var(--accent)' }}>${formatUsdc(signalFeeUsdc)} USDC</span> for one price-movement signal.
+            Pay{' '}
+            {isFeeLoaded
+              ? <span className="font-semibold tabular-nums" style={{ color: 'var(--accent)' }}>${formatUsdc(signalFeeUsdc)} USDC</span>
+              : <span className="inline-block w-14 h-4 rounded align-middle animate-pulse" style={{ background: 'var(--surface-strong)' }} />
+            }{' '}
+            for one price-movement signal.
           </p>
         </div>
 
@@ -297,13 +304,22 @@ export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onVie
           </div>
 
           {/* Live signal preview */}
-          {step === 'select' && <SignalPreview token={token} />}
+          {step === 'select' && (
+            <SignalPreview
+              token={token}
+              contractFee={isFeeLoaded ? formatUsdc(signalFeeUsdc) : undefined}
+            />
+          )}
 
           {/* Order summary */}
           <div className="rounded-xl p-4 flex flex-col gap-2.5 text-sm" style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}>
             <Row label="Token" value={token} />
             <Row label="Window" value={`${windowDurationHrs} hour${windowDurationHrs !== 1 ? 's' : ''}`} />
-            <Row label="Signal fee" value={`$${formatUsdc(signalFeeUsdc)} USDC`} accent />
+            <Row
+              label="Signal fee"
+              value={isFeeLoaded ? `$${formatUsdc(signalFeeUsdc)} USDC` : '…'}
+              accent
+            />
             {usdcBalance !== undefined && (
               <div className="flex justify-between items-center pt-2 mt-0.5" style={{ borderTop: '1px solid var(--border)' }}>
                 <span className="flex items-center gap-1.5" style={{ color: 'var(--subtle)' }}>
@@ -343,7 +359,7 @@ export function BuySignal({ onBack, onViewRequest }: { onBack: () => void; onVie
           <div className="flex flex-col gap-2.5">
             <button
               onClick={handleApprove}
-              disabled={approveInFlight || step !== 'select' || paused || !hasEnoughUsdc}
+              disabled={approveInFlight || step !== 'select' || paused || !isFeeLoaded || !hasEnoughUsdc}
               className="w-full py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-35"
               style={{ background: 'var(--accent)', color: '#080f1a' }}
             >

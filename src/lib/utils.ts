@@ -10,11 +10,18 @@ export function formatAddress(addr: string): string {
 }
 
 export function formatUsdc(raw: bigint, decimals = 6): string {
-  const n = Number(raw) / 10 ** decimals
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
-  }).format(n)
+  // Use BigInt arithmetic to avoid Number precision loss on large balances.
+  const divisor = 10n ** BigInt(decimals)
+  const whole = raw / divisor
+  const frac = raw % divisor
+  // Left-pad fractional part to `decimals` digits, then trim trailing zeros (min 2).
+  const fracStr = frac.toString().padStart(decimals, '0')
+  const trimmed = fracStr.replace(/0+$/, '').padEnd(2, '0')
+  const combined = `${whole}.${trimmed}`
+  // Use Intl only for the integer part's thousand-separators; keep our own frac.
+  const [intPart] = combined.split('.')
+  const formatted = new Intl.NumberFormat('en-US').format(BigInt(intPart))
+  return `${formatted}.${trimmed}`
 }
 
 export function parseOnchainError(error: unknown): string {
