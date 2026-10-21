@@ -182,8 +182,32 @@ Escrow is live. Seller commits pending (Render backend `SELLER_PRIVATE_KEY` env 
 | Contract | Purpose | Status |
 |---|---|---|
 | `PredictAgent.sol` | Core single-seller escrow, permissioned verifier | Deployed on Arc mainnet |
-| `PredictAgentChainlink.sol` | Trustless Chainlink Data Feed settlement + Automation upkeep | Ready to deploy — set feed addresses via `setPriceFeed()` once Chainlink publishes Arc mainnet proxy addresses |
+| `PredictAgentChainlink.sol` | Trustless Chainlink Data Feed settlement + Automation upkeep | Ready to deploy. Chainlink feeds live on Arc mainnet — see feed addresses below |
 | `SellerRegistry.sol` | Multi-seller registry: any address can register as a seller | Deployed Arc Testnet: `0x5cba315ecbc5abc11f5351036a0cb80b13d097b8` |
+
+### Chainlink Price Feed addresses on Arc mainnet
+
+Verified from the Chainlink reference-data-directory API (2026-10-21). All feeds are 8-decimal proxies.
+
+| Token | Feed | Proxy address |
+|---|---|---|
+| BTC | BTC / USD | `0xa109B535C70C8Be9995be64Bb6751AcDB27e03De` |
+| ETH | ETH / USD | `0x50FCDD99D6762D1C170DC6A9111db944AEE6D364` |
+| SOL | SOL / USD | `0x2d04D354f5fDaE3De723df475745B0a9B4edf90C` |
+| LINK | LINK / USD | `0xD37600AB06758356F0f5eE607299204785bF8c3a` |
+| AAVE | AAVE / USD | `0x06e59eA707FEAA09467C689Baf8D49C180fE2118` |
+
+ARB / USD feed not yet available on Arc mainnet. ARB requests can still use `PredictAgent.sol` with the permissioned verifier path.
+
+After deploying `PredictAgentChainlink.sol`, wire feeds with:
+
+```bash
+CHAINLINK=<deployed PredictAgentChainlink address>
+
+cast send $CHAINLINK "setPriceFeed(string,address)" "BTC" 0xa109B535C70C8Be9995be64Bb6751AcDB27e03De --rpc-url https://rpc.mainnet.arc.io --private-key $OWNER_PRIVATE_KEY
+cast send $CHAINLINK "setPriceFeed(string,address)" "ETH" 0x50FCDD99D6762D1C170DC6A9111db944AEE6D364 --rpc-url https://rpc.mainnet.arc.io --private-key $OWNER_PRIVATE_KEY
+cast send $CHAINLINK "setPriceFeed(string,address)" "SOL" 0x2d04D354f5fDaE3De723df475745B0a9B4edf90C --rpc-url https://rpc.mainnet.arc.io --private-key $OWNER_PRIVATE_KEY
+```
 
 ### Deploy (GitHub Actions)
 

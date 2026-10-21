@@ -23,11 +23,16 @@ pragma solidity ^0.8.20;
  * AutomationCompatibleInterface so a registered Upkeep can call
  * performUpkeep() automatically when a request is ready to settle.
  *
- * CHAINLINK PRICE FEEDS on Arc Mainnet
- * ─────────────────────────────────────
- * Arc uses Chainlink's standard EACAggregatorProxy interface.
- * Feed addresses are set per-token by the owner and can be updated.
- * The owner MUST set feed addresses before buyers can use a token.
+ * CHAINLINK PRICE FEEDS on Arc Mainnet (verified 2026-10-21, all 8 decimals)
+ * ──────────────────────────────────────────────────────────────────────────
+ * BTC/USD  0xa109B535C70C8Be9995be64Bb6751AcDB27e03De
+ * ETH/USD  0x50FCDD99D6762D1C170DC6A9111db944AEE6D364
+ * SOL/USD  0x2d04D354f5fDaE3De723df475745B0a9B4edf90C
+ * LINK/USD 0xD37600AB06758356F0f5eE607299204785bF8c3a
+ * AAVE/USD 0x06e59eA707FEAA09467C689Baf8D49C180fE2118
+ *
+ * Feed addresses are set per-token by the owner via setPriceFeed().
+ * The owner MUST call setPriceFeed() before buyers can use a token.
  *
  * LIMITATIONS (stated plainly)
  * ─────────────────────────────
