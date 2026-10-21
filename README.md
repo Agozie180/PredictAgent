@@ -182,8 +182,8 @@ Escrow is live. Seller commits pending (Render backend `SELLER_PRIVATE_KEY` env 
 | Contract | Purpose | Status |
 |---|---|---|
 | `PredictAgent.sol` | Core single-seller escrow, permissioned verifier | Deployed on Arc mainnet |
-| `PredictAgentChainlink.sol` | Trustless Chainlink Data Feed settlement + Automation upkeep | Ready to deploy when feeds live on Arc |
-| `SellerRegistry.sol` | Multi-seller registry: any address can register as a seller | Ready to deploy |
+| `PredictAgentChainlink.sol` | Trustless Chainlink Data Feed settlement + Automation upkeep | Ready to deploy — set feed addresses via `setPriceFeed()` once Chainlink publishes Arc mainnet proxy addresses |
+| `SellerRegistry.sol` | Multi-seller registry: any address can register as a seller | Deployed Arc Testnet: `0x5cba315ecbc5abc11f5351036a0cb80b13d097b8` |
 
 ### Deploy (GitHub Actions)
 

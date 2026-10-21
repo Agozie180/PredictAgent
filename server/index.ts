@@ -17,7 +17,8 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { createPublicClient, http } from 'viem'
+import { createPublicClient, createWalletClient, http, parseAbi, type Hash } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 import { fetchCandles, fetchSpotPrices, SUPPORTED_TOKENS, type SpotPrice } from './marketData'
 import { computeSignal, computeCommitHash, stringToBytes32, backtestSignal, type SignalOutput } from './signal'
 
@@ -103,6 +104,153 @@ function getClient() {
   }
   return publicClient
 }
+
+// ── Wallet client for on-chain writes (commitSignal) ──────────────────────────
+
+const sellerAccount = privateKeyToAccount(
+  SELLER_PRIVATE_KEY.startsWith('0x')
+    ? (SELLER_PRIVATE_KEY as `0x${string}`)
+    : (`0x${SELLER_PRIVATE_KEY}` as `0x${string}`)
+)
+
+const ARC_CHAIN = {
+  id: 5042,
+  name: 'Arc Mainnet',
+  nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
+  rpcUrls: { default: { http: [ARC_RPC_URL_ENV] } },
+} as const
+
+let walletClient: ReturnType<typeof createWalletClient> | null = null
+function getWalletClient() {
+  if (!walletClient) {
+    walletClient = createWalletClient({
+      account: sellerAccount,
+      chain: ARC_CHAIN,
+      transport: http(buildRpcUrl()),
+    })
+  }
+  return walletClient
+}
+
+const COMMIT_ABI = parseAbi([
+  'function commitSignal(uint256 requestId, bytes32 commitHash) external',
+  'function nextRequestId() external view returns (uint256)',
+])
+
+/** Commit a signal to the contract on-chain. Returns the tx hash. */
+async function onChainCommit(requestId: bigint, commitHash: `0x${string}`): Promise<Hash> {
+  const wc = getWalletClient()
+  const hash = await wc.writeContract({
+    address: CONTRACT_ADDRESS,
+    abi: COMMIT_ABI,
+    functionName: 'commitSignal',
+    args: [requestId, commitHash],
+    chain: ARC_CHAIN,
+    account: sellerAccount,
+  })
+  console.log(`[commit] TX sent for request #${requestId}: ${hash}`)
+  return hash
+}
+
+// Tracks requests we've already attempted so we don't loop on failures
+const commitAttempted = new Set<string>()
+
+/**
+ * Auto-commit worker: polls the contract for PENDING requests and commits them.
+ * Runs every 60 s. Skips requests whose windowOpen has already passed.
+ */
+async function autoCommitWorker() {
+  try {
+    const client = getClient()
+    const nextId = await client.readContract({
+      address: CONTRACT_ADDRESS,
+      abi: COMMIT_ABI,
+      functionName: 'nextRequestId',
+    }) as bigint
+
+    if (nextId <= 1n) return  // no requests yet
+
+    const nowSecs = Math.floor(Date.now() / 1000)
+
+    for (let id = 1n; id < nextId; id++) {
+      const key = id.toString()
+      if (commitAttempted.has(key)) continue
+
+      const onChain = await getOnChainStatus(id)
+      if (!onChain) continue
+      if (onChain.status !== 0) {
+        // Already committed/revealed/settled — mark as attempted so we skip next time
+        commitAttempted.add(key)
+        continue
+      }
+
+      // Read the request to get windowOpen and tokenSymbol
+      const req = await client.readContract({
+        address: CONTRACT_ADDRESS,
+        abi: STATUS_ABI,
+        functionName: 'getRequest',
+        args: [id],
+      }) as {
+        requestId: bigint; tokenSymbol: string; windowOpen: bigint; windowClose: bigint
+        status: number; buyer: string; feePaid: bigint
+      }
+
+      if (req.requestId === 0n) continue
+
+      const windowOpen = Number(req.windowOpen)
+      if (nowSecs >= windowOpen) {
+        // Window already open — too late to commit, skip permanently
+        console.warn(`[commit] Request #${key}: windowOpen already passed (${windowOpen}), skipping`)
+        commitAttempted.add(key)
+        continue
+      }
+
+      const token = req.tokenSymbol.toUpperCase()
+      if (!SUPPORTED_TOKENS.includes(token as typeof SUPPORTED_TOKENS[number])) {
+        console.warn(`[commit] Request #${key}: unsupported token "${token}", skipping`)
+        commitAttempted.add(key)
+        continue
+      }
+
+      console.log(`[commit] Auto-committing request #${key} (${token})...`)
+
+      // Compute / refresh signal for this token
+      let output: SignalOutput
+      try {
+        output = await getOrRefreshSignal(token)
+      } catch (e) {
+        console.error(`[commit] Failed to compute signal for ${token}: ${String(e)}`)
+        continue  // retry next cycle
+      }
+
+      const dirBytes32 = stringToBytes32(output.direction)
+      const hash = computeCommitHash(
+        id, dirBytes32,
+        output.targetPrice, output.confidenceBandBps,
+        output.timestamp, output.nonce,
+      )
+
+      try {
+        await onChainCommit(id, hash)
+        // Persist to store so /signal/:requestId can serve it
+        store.signals[token] = { ...store.signals[token]!, requestId: key }
+        store.requestIndex[key] = token
+        saveStore(store)
+        commitAttempted.add(key)
+        console.log(`[commit] ✓ Request #${key} committed on-chain (${token} ${output.direction})`)
+      } catch (e) {
+        console.error(`[commit] ✗ on-chain commit failed for #${key}: ${String(e)}`)
+        // Do NOT add to attempted — retry next cycle
+      }
+    }
+  } catch (e) {
+    console.error('[commit] autoCommitWorker error:', e)
+  }
+}
+
+// Run immediately on startup, then every 60 s
+autoCommitWorker()
+setInterval(autoCommitWorker, 60_000)
 
 /** Check on-chain: returns status 0=PENDING,1=COMMITTED,2+=REVEALED/SETTLED/REFUNDED or null on error */
 async function getOnChainStatus(requestId: bigint): Promise<{ status: number; buyer: string } | null> {
@@ -299,6 +447,7 @@ Bun.serve({
         cachedSignals: [...liveSignals.keys()],
         committedRequests: Object.keys(store.requestIndex).length,
         contract: CONTRACT_ADDRESS,
+        seller: sellerAccount.address,
         chainId: 5042,
       })
     }
