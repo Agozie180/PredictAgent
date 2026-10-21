@@ -162,6 +162,21 @@ cast send $CONTRACT "claimRefund(uint256)" 1 --private-key $BUYER_KEY
 
 ---
 
+## Live on-chain activity
+
+Four signal requests confirmed on Arc mainnet (verified via `getRequest` eth_call, 2026-10-21):
+
+| Request ID | Token | Buyer | Fee | Status |
+|---|---|---|---|---|
+| [#1](https://explorer.arc.io/address/0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f) | BTC | `0x62AA...988a` | $0.10 USDC | CREATED |
+| [#2](https://explorer.arc.io/address/0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f) | ETH | `0x62AA...988a` | $0.10 USDC | CREATED |
+| [#3](https://explorer.arc.io/address/0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f) | SOL | `0x62AA...988a` | $0.10 USDC | CREATED |
+| [#4](https://explorer.arc.io/address/0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f) | ARB | `0x62AA...988a` | $0.10 USDC | CREATED |
+
+Escrow is live. Seller commits pending (Render backend `SELLER_PRIVATE_KEY` env var required to unlock commit/reveal).
+
+---
+
 ## Contracts
 
 | Contract | Purpose | Status |
