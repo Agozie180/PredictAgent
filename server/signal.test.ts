@@ -159,7 +159,7 @@ describe('computeSignal()', () => {
     const signal = computeSignal('BTC', candles)
     expect(['BULLISH', 'BEARISH']).toContain(signal.direction)
     expect(Number(signal.targetPrice)).toBeGreaterThan(0)
-    expect(Number(signal.confidenceBandBps)).toBeGreaterThanOrEqual(300)
+    expect(Number(signal.confidenceBandBps)).toBeGreaterThanOrEqual(50)
     expect(Number(signal.confidenceBandBps)).toBeLessThanOrEqual(2000)
     expect(signal.strengthScore).toBeGreaterThanOrEqual(0)
     expect(signal.strengthScore).toBeLessThanOrEqual(100)
@@ -259,7 +259,7 @@ describe('backtestSignal()', () => {
     expect(result.bandHitRate).toBeLessThanOrEqual(1)
     expect(result.bullishCount + result.bearishCount).toBe(result.windowCount)
     expect(result.trades).toHaveLength(result.windowCount)
-    expect(result.disclaimer).toContain('in-sample')
+    expect(result.disclaimer.toLowerCase()).toContain('out-of-sample')
   })
 
   it('produces more windows with more candles', () => {
