@@ -153,9 +153,8 @@ async function onChainCommit(requestId: bigint, commitHash: `0x${string}`): Prom
 }
 
 // Tracks requests we've already attempted so we don't loop on failures.
-// Seeded from the persisted store on startup so a server restart doesn't
-// re-commit already-committed requests.
-const commitAttempted = new Set<string>(Object.keys(store.requestIndex))
+// Defined below loadStore() — must not be hoisted above it.
+// (commitAttempted is initialised after store is loaded at line ~312)
 
 /**
  * Auto-commit worker: polls the contract for PENDING requests and commits them.
@@ -250,9 +249,7 @@ async function autoCommitWorker() {
   }
 }
 
-// Run immediately on startup, then every 60 s
-autoCommitWorker()
-setInterval(autoCommitWorker, 60_000)
+// autoCommitWorker() is started after store is loaded — see below loadStore()
 
 /** Check on-chain: returns status 0=PENDING,1=COMMITTED,2+=REVEALED/SETTLED/REFUNDED or null on error */
 async function getOnChainStatus(requestId: bigint): Promise<{ status: number; buyer: string } | null> {
@@ -310,6 +307,14 @@ function saveStore(store: Store) {
 }
 
 let store = loadStore()
+
+// Seeded from the persisted store so a server restart doesn't re-commit
+// already-committed requests. MUST be declared after loadStore().
+const commitAttempted = new Set<string>(Object.keys(store.requestIndex))
+
+// Start workers AFTER store and commitAttempted are initialised
+autoCommitWorker()
+setInterval(autoCommitWorker, 60_000)
 
 const liveSignals: Map<string, { output: SignalOutput; computedAt: number }> = new Map()
 
@@ -591,6 +596,16 @@ Bun.serve({
 
       let requestId: bigint
       try { requestId = BigInt(requestIdStr) } catch { return json({ error: 'Invalid requestId — must be a positive integer string' }, 400) }
+
+      // Guard: verify the request exists on-chain before writing to the store
+      // (prevents a poisoned store from fake requestIds)
+      const onChainCheck = await getOnChainStatus(requestId)
+      if (!onChainCheck) {
+        return json({ error: `Request ${requestIdStr} not found on-chain. Cannot commit.` }, 404)
+      }
+      if (onChainCheck.status >= 2) {
+        return json({ error: `Request ${requestIdStr} is already past the commit stage (status ${onChainCheck.status}).` }, 409)
+      }
 
       let output: SignalOutput
       try { output = await refreshSignal(token) } catch (e) { return json({ error: `Market data unavailable: ${String(e)}` }, 503) }

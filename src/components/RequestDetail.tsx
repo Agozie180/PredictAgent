@@ -3,16 +3,16 @@ import { useAccount, useWalletClient } from 'wagmi'
 import { useRequest, useClaimRefund } from '../hooks/usePredictAgent'
 import { useCountdown } from '../hooks/useCountdown'
 import { formatUsdc, formatAddress, formatTimestamp, STATUS_LABELS, STATUS_COLORS, directionLabel } from '../lib/utils'
-import { buildAddressExplorerUrl } from '@/onchain-facts'
+import { buildAddressExplorerUrl, buildTxExplorerUrl } from '@/onchain-facts'
 import { keccak256, encodePacked } from 'viem'
 import { arc } from 'viem/chains'
+import { PREDICT_AGENT_ADDRESS } from '../lib/predictAgentAbi'
 import { ArrowLeft, Loader2, TrendingUp, TrendingDown, RefreshCw, Clock, ExternalLink, ShieldCheck, AlertCircle, RotateCcw, CheckCircle2 } from 'lucide-react'
 
-const ARC_EXPLORER = 'https://explorer.arc.io'
 const ZERO_HASH = '0x0000000000000000000000000000000000000000000000000000000000000000'
 
-function explorerAddr(addr: string) { return `${ARC_EXPLORER}/address/${addr}` }
-function explorerTx(hash: string) { return `${ARC_EXPLORER}/tx/${hash}` }
+function explorerAddr(addr: string) { return buildAddressExplorerUrl(arc.id, addr) }
+function explorerTx(hash: string) { return buildTxExplorerUrl(arc.id, hash) }
 
 /** Recompute commit hash client-side — same encoding as the contract */
 function recomputeHash(
@@ -449,15 +449,17 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
                 >
                   View buyer on explorer <ExternalLink size={10} />
                 </a>
-                <a
-                  href={buildAddressExplorerUrl(arc.id, '0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 transition-opacity hover:opacity-70 min-h-[44px]"
-                  style={{ color: 'var(--accent)' }}
-                >
-                  View contract on explorer <ExternalLink size={10} />
-                </a>
+                {PREDICT_AGENT_ADDRESS && (
+                  <a
+                    href={explorerAddr(PREDICT_AGENT_ADDRESS)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 transition-opacity hover:opacity-70 min-h-[44px]"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    View contract on explorer <ExternalLink size={10} />
+                  </a>
+                )}
               </div>
             )}
           </div>
@@ -469,15 +471,17 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
             <p className="text-sm" style={{ color: 'var(--subtle)' }}>
               No request found for ID #{lookupId.toString()}.
             </p>
-            <a
-              href={buildAddressExplorerUrl(arc.id, '0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-70"
-              style={{ color: 'var(--accent)' }}
-            >
-              View contract on Arc Explorer <ExternalLink size={11} />
-            </a>
+            {PREDICT_AGENT_ADDRESS && (
+              <a
+                href={explorerAddr(PREDICT_AGENT_ADDRESS)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-70"
+                style={{ color: 'var(--accent)' }}
+              >
+                View contract on Arc Explorer <ExternalLink size={11} />
+              </a>
+            )}
           </div>
         )}
       </div>

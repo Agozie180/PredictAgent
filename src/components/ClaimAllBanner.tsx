@@ -13,7 +13,8 @@ export function ClaimAllBanner() {
   const { data: walletClient } = useWalletClient()
   const { nextRequestId } = useContractInfo()
   const count = Number(nextRequestId) - 1  // nextRequestId is the next unused id
-  const { requests, isLoading } = useMultipleRequests(count > 0 ? count : 0)
+  // Cap at 50 to avoid batching hundreds of RPC calls every 10 s on a busy contract
+  const { requests, isLoading } = useMultipleRequests(Math.min(count > 0 ? count : 0, 50))
   const { claimAll, isPending, errors, txHashes, progress } = useClaimAllRefunds()
 
   // Use a real ticking clock — useCountdown(0n) returns epoch 0 which never passes any deadline
@@ -143,7 +144,6 @@ export function ClaimAllBanner() {
             void claimAll(
               eligibleRequests.map(r => r.requestId),
               walletClient,
-              nowSecs,
             )
           }}
           disabled={isPending || !walletClient}

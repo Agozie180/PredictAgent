@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { useReadContract, useReadContracts } from 'wagmi'
 import { arc } from 'viem/chains'
+import type { Chain } from 'viem'
 import { PREDICT_AGENT_ABI, PREDICT_AGENT_ADDRESS } from '../lib/predictAgentAbi'
+
+// Full Arc mainnet chain definition for viem writeContract calls.
+// Passing only { id } is an incomplete Chain and causes gas estimation failures.
+const ARC_CHAIN: Chain = arc
 
 const CHAIN_ID = arc.id
 
@@ -88,7 +93,14 @@ export function useRequest(requestId: bigint | undefined) {
     functionName: 'getRequest',
     args: [requestId ?? 0n],
     chainId: CHAIN_ID,
-    query: { enabled: !!addr && !!requestId && requestId > 0n, refetchInterval: 10_000 },
+    query: {
+      enabled: !!addr && !!requestId && requestId > 0n,
+      // Stop polling once the request reaches a terminal state (SETTLED=3, REFUNDED=4)
+      refetchInterval: (q) => {
+        const status = (q.state.data as { status?: number } | undefined)?.status
+        return status !== undefined && status >= 3 ? false : 10_000
+      },
+    },
   })
 
   // wagmi returns a named tuple — cast to our interface which has identical field order
@@ -115,7 +127,7 @@ export function useClaimRefund() {
         abi: PREDICT_AGENT_ABI,
         functionName: 'claimRefund',
         args: [requestId],
-        chain: { id: CHAIN_ID } as import('viem').Chain,
+        chain: ARC_CHAIN,
         account: walletClient.account!,
       })
       setTxHash(hash)
@@ -144,7 +156,6 @@ export function useClaimAllRefunds() {
   async function claimAll(
     requestIds: bigint[],
     walletClient: import('viem').WalletClient,
-    nowSecs: number,
   ) {
     if (!addr || requestIds.length === 0) return
     setIsPending(true)
@@ -160,7 +171,7 @@ export function useClaimAllRefunds() {
           abi: PREDICT_AGENT_ABI,
           functionName: 'claimRefund',
           args: [requestIds[i]],
-          chain: { id: CHAIN_ID } as import('viem').Chain,
+          chain: ARC_CHAIN,
           account: walletClient.account!,
         })
         hashes.push(hash)
@@ -173,7 +184,6 @@ export function useClaimAllRefunds() {
     setTxHashes(hashes)
     setErrors(errs)
     setIsPending(false)
-    void nowSecs // consumed to avoid lint unused warning
   }
 
   return { claimAll, isPending, errors, txHashes, progress }

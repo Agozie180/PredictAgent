@@ -33,9 +33,12 @@ export function parseOnchainError(error: unknown): string {
     return 'Insufficient USDC balance. Please add funds.'
   }
   if (msg.includes('paused')) return 'The marketplace is currently paused.'
-  if (msg.includes('notseller')) return 'Only the registered seller can perform this action.'
-  if (msg.includes('notbuyer')) return 'Only the buyer of this request can claim the refund.'
-  if (msg.includes('hashmismatch')) return 'Signal hash mismatch — reveal data does not match commitment.'
+  // Custom errors come through as "PredictAgent__NotSeller" etc — match on the suffix after __
+  if (msg.includes('notseller') || msg.includes('__notseller')) return 'Only the registered seller can perform this action.'
+  if (msg.includes('notbuyer') || msg.includes('__notbuyer')) return 'Only the buyer of this request can claim the refund.'
+  if (msg.includes('hashmismatch') || msg.includes('__hashmismatch')) return 'Signal hash mismatch — reveal data does not match commitment.'
+  if (msg.includes('revealdeadlinenotreached') || msg.includes('__revealdeadlinenotreached')) return 'The reveal deadline has not been reached yet — refund not available yet.'
+  if (msg.includes('invalidstatus') || msg.includes('__invalidstatus')) return 'This action cannot be performed on a request in its current state.'
   if (msg.includes('reverted')) {
     const m = msg.match(/reason="([^"]+)"/)
     return m ? `Transaction failed: ${m[1]}` : 'Transaction failed. Please try again.'
