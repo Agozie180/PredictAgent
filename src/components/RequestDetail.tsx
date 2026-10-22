@@ -90,10 +90,16 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
   const isBuyer = !!connectedAddress && !!request &&
     connectedAddress.toLowerCase() === request.buyer.toLowerCase()
 
+  // buyerRevealDeadline stores the OFFSET in seconds (not an absolute timestamp).
+  // The actual absolute deadline is windowClose + buyerRevealDeadline.
+  // claimRefund also allows claims on COMMITTED status past this deadline.
+  const absoluteRevealDeadline = request
+    ? Number(request.windowClose) + Number(request.buyerRevealDeadline)
+    : 0
   const refundEligible = !!request &&
-    request.status === 0 &&
-    nowSecs > Number(request.buyerRevealDeadline) &&
-    request.buyerRevealDeadline > 0n
+    (request.status === 0 || request.status === 1) &&
+    nowSecs > absoluteRevealDeadline &&
+    absoluteRevealDeadline > 0
 
   async function handleClaimRefund() {
     if (!request || !walletClient) return
@@ -319,8 +325,10 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
                 { label: 'WINDOW CLOSE', value: formatTimestamp(request.windowClose), mono: false },
                 { label: 'FEE PAID',     value: `$${formatUsdc(request.feePaid)} USDC`, mono: false },
                 {
-                  label: 'REVEAL DEADLINE',
-                  value: formatTimestamp(request.buyerRevealDeadline),
+                  label: 'REFUND ELIGIBLE AFTER',
+                  value: absoluteRevealDeadline > 0
+                    ? formatTimestamp(BigInt(absoluteRevealDeadline))
+                    : '—',
                   mono: false,
                 },
               ].map(f => (

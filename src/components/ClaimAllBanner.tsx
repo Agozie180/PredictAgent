@@ -26,12 +26,16 @@ export function ClaimAllBanner() {
 
   const eligibleRequests = useMemo(() => {
     if (!connectedAddress || !requests.length) return []
-    return requests.filter(r =>
-      r.status === 0 &&
-      r.buyerRevealDeadline > 0n &&
-      nowSecs > Number(r.buyerRevealDeadline) &&
-      r.buyer.toLowerCase() === connectedAddress.toLowerCase()
-    )
+    return requests.filter(r => {
+      // buyerRevealDeadline is an OFFSET in seconds, not an absolute timestamp.
+      // The absolute refund-eligible time is windowClose + buyerRevealDeadline.
+      // claimRefund also accepts COMMITTED (status 1) past the same deadline.
+      const absoluteDeadline = Number(r.windowClose) + Number(r.buyerRevealDeadline)
+      return (r.status === 0 || r.status === 1) &&
+        absoluteDeadline > 0 &&
+        nowSecs > absoluteDeadline &&
+        r.buyer.toLowerCase() === connectedAddress.toLowerCase()
+    })
   }, [requests, connectedAddress, nowSecs])
 
   // Snapshot the claimable total at the moment the user clicks "Claim All" so the
