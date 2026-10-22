@@ -1,10 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import { arc } from 'viem/chains'
 import { RotateCcw, Loader2, CheckCircle2, ExternalLink, AlertCircle } from 'lucide-react'
 import { useMultipleRequests, useContractInfo, useClaimAllRefunds } from '../hooks/usePredictAgent'
 import { formatUsdc } from '../lib/utils'
-import { useCountdown } from '../hooks/useCountdown'
 
 const ARC_EXPLORER = 'https://explorer.arc.io'
 
@@ -17,8 +16,13 @@ export function ClaimAllBanner() {
   const { requests, isLoading } = useMultipleRequests(count > 0 ? count : 0)
   const { claimAll, isPending, errors, txHashes, progress } = useClaimAllRefunds()
 
-  // Use a stable nowSecs from useCountdown with epoch=0 (always returns current time)
-  const { nowSecs } = useCountdown(0n)
+  // Use a real ticking clock — useCountdown(0n) returns epoch 0 which never passes any deadline
+  const [nowSecs, setNowSecs] = useState(() => Math.floor(Date.now() / 1000))
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    timerRef.current = setInterval(() => setNowSecs(Math.floor(Date.now() / 1000)), 5_000)
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [])
 
   const eligibleRequests = useMemo(() => {
     if (!connectedAddress || !requests.length) return []
@@ -30,7 +34,11 @@ export function ClaimAllBanner() {
     )
   }, [requests, connectedAddress, nowSecs])
 
-  const totalRefundable = eligibleRequests.reduce((sum, r) => sum + r.feePaid, 0n)
+  // Snapshot the claimable total at the moment the user clicks "Claim All" so the
+  // success subtitle stays correct even after eligibleRequests drains to zero.
+  const [claimedTotal, setClaimedTotal] = useState<bigint>(0n)
+  const liveTotal = eligibleRequests.reduce((sum, r) => sum + r.feePaid, 0n)
+  const totalRefundable = txHashes.length > 0 && claimedTotal > 0n ? claimedTotal : liveTotal
 
   // Nothing to show: not connected, loading, or no eligible refunds and no completed claims
   if (!connectedAddress) return null
@@ -63,7 +71,7 @@ export function ClaimAllBanner() {
             </p>
             <p className="text-xs" style={{ color: 'var(--subtle)' }}>
               {allDone
-                ? `${formatUsdc(eligibleRequests.reduce((s, r) => s + r.feePaid, 0n))} USDC returned to your wallet.`
+                ? `$${formatUsdc(totalRefundable)} USDC returned to your wallet.`
                 : `The seller did not commit to ${eligibleRequests.length > 1 ? 'these requests' : 'this request'} in time. Claim your full refund of $${formatUsdc(totalRefundable)} USDC in one transaction per request.`
               }
             </p>
@@ -127,6 +135,7 @@ export function ClaimAllBanner() {
         <button
           onClick={() => {
             if (!walletClient) return
+            setClaimedTotal(liveTotal)
             void claimAll(
               eligibleRequests.map(r => r.requestId),
               walletClient,

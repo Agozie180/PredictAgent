@@ -163,7 +163,13 @@ export default function App() {
                   <LandingPage onEnterApp={() => navigate('feed')} />
                 )}
                 {view === 'feed' && (
-                  <SignalFeed onBuySignal={() => navigate('buy')} />
+                  <SignalFeed
+                    onBuySignal={() => navigate('buy')}
+                    onViewRequest={(id) => {
+                      setDetailRequestId(id)
+                      navigate('detail')
+                    }}
+                  />
                 )}
                 {view === 'buy' && (
                   <BuySignal

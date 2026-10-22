@@ -152,8 +152,10 @@ async function onChainCommit(requestId: bigint, commitHash: `0x${string}`): Prom
   return hash
 }
 
-// Tracks requests we've already attempted so we don't loop on failures
-const commitAttempted = new Set<string>()
+// Tracks requests we've already attempted so we don't loop on failures.
+// Seeded from the persisted store on startup so a server restart doesn't
+// re-commit already-committed requests.
+const commitAttempted = new Set<string>(Object.keys(store.requestIndex))
 
 /**
  * Auto-commit worker: polls the contract for PENDING requests and commits them.

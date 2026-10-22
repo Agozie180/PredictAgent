@@ -58,7 +58,7 @@ function StatusPip({ status }: { status: number }) {
   )
 }
 
-function RequestCard({ req }: { req: SignalRequest }) {
+function RequestCard({ req, onViewRequest }: { req: SignalRequest; onViewRequest?: (id: string) => void }) {
   const ts = Number(req.windowOpen) * 1000
   const te = Number(req.windowClose) * 1000
   const isOpen = useIsOpen(ts, te)
@@ -70,7 +70,9 @@ function RequestCard({ req }: { req: SignalRequest }) {
   return (
     <div
       className="rounded-2xl p-5 flex flex-col gap-4 transition-all hover:border-opacity-60"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)', cursor: onViewRequest ? 'pointer' : 'default' }}
+      onClick={() => onViewRequest?.(req.requestId.toString())}
+      role={onViewRequest ? 'button' : undefined}
     >
       {/* Row 1 */}
       <div className="flex items-start justify-between gap-2">
@@ -145,11 +147,22 @@ function RequestCard({ req }: { req: SignalRequest }) {
           <span className="mono" style={{ color: 'var(--muted)' }}>{req.commitHash.slice(0, 20)}…</span>
         </div>
       )}
+
+      {/* Track link */}
+      {onViewRequest && (
+        <div
+          className="flex items-center justify-end gap-1 text-xs font-semibold"
+          style={{ color: 'var(--accent)' }}
+          onClick={e => { e.stopPropagation(); onViewRequest(req.requestId.toString()) }}
+        >
+          Track request <ChevronRight size={12} />
+        </div>
+      )}
     </div>
   )
 }
 
-export function SignalFeed({ onBuySignal }: { onBuySignal: () => void }) {
+export function SignalFeed({ onBuySignal, onViewRequest }: { onBuySignal: () => void; onViewRequest?: (id: string) => void }) {
   const [previewToken, setPreviewToken] = useState<string>('BTC')
   const { isLoading: infoLoading, signalFeeUsdc, sellerAddr, nextRequestId, paused } = useContractInfo()
   const { settled, refunded, isLoading: repLoading } = useSellerReputation(sellerAddr)
@@ -337,7 +350,7 @@ export function SignalFeed({ onBuySignal }: { onBuySignal: () => void }) {
 
         <div className="flex flex-col gap-3">
           {[...requests].reverse().map(req => (
-            <RequestCard key={req.requestId.toString()} req={req} />
+            <RequestCard key={req.requestId.toString()} req={req} onViewRequest={onViewRequest} />
           ))}
         </div>
       </div>
