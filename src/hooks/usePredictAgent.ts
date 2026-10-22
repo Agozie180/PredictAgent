@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useReadContract, useReadContracts } from 'wagmi'
 import { arc } from 'viem/chains'
 import { PREDICT_AGENT_ABI, PREDICT_AGENT_ADDRESS } from '../lib/predictAgentAbi'
@@ -95,6 +96,38 @@ export function useRequest(requestId: bigint | undefined) {
   // Treat zero requestId as "not found" (Solidity returns zero struct for missing ids)
   const found = request && request.requestId > 0n ? request : undefined
   return { request: found, isLoading, refetch }
+}
+
+export function useClaimRefund() {
+  const addr = PREDICT_AGENT_ADDRESS
+  const [isPending, setIsPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+
+  async function claimRefund(requestId: bigint, walletClient: import('viem').WalletClient) {
+    if (!addr) return
+    setIsPending(true)
+    setError(null)
+    setTxHash(null)
+    try {
+      const hash = await walletClient.writeContract({
+        address: addr,
+        abi: PREDICT_AGENT_ABI,
+        functionName: 'claimRefund',
+        args: [requestId],
+        chain: { id: CHAIN_ID } as import('viem').Chain,
+        account: walletClient.account!,
+      })
+      setTxHash(hash)
+    } catch (e) {
+      const { parseOnchainError } = await import('../lib/utils')
+      setError(parseOnchainError(e))
+    } finally {
+      setIsPending(false)
+    }
+  }
+
+  return { claimRefund, isPending, error, txHash }
 }
 
 export function useMultipleRequests(count: number) {

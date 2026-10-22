@@ -1,16 +1,18 @@
 import { useState, useMemo } from 'react'
-import { useRequest } from '../hooks/usePredictAgent'
+import { useAccount, useWalletClient } from 'wagmi'
+import { useRequest, useClaimRefund } from '../hooks/usePredictAgent'
 import { useCountdown } from '../hooks/useCountdown'
 import { formatUsdc, formatAddress, formatTimestamp, STATUS_LABELS, STATUS_COLORS, directionLabel } from '../lib/utils'
 import { buildAddressExplorerUrl } from '@/onchain-facts'
 import { keccak256, encodePacked } from 'viem'
 import { arc } from 'viem/chains'
-import { ArrowLeft, Loader2, TrendingUp, TrendingDown, RefreshCw, Clock, ExternalLink, ShieldCheck, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, TrendingUp, TrendingDown, RefreshCw, Clock, ExternalLink, ShieldCheck, AlertCircle, RotateCcw, CheckCircle2 } from 'lucide-react'
 
 const ARC_EXPLORER = 'https://explorer.arc.io'
 const ZERO_HASH = '0x0000000000000000000000000000000000000000000000000000000000000000'
 
 function explorerAddr(addr: string) { return `${ARC_EXPLORER}/address/${addr}` }
+function explorerTx(hash: string) { return `${ARC_EXPLORER}/tx/${hash}` }
 
 /** Recompute commit hash client-side — same encoding as the contract */
 function recomputeHash(
@@ -39,10 +41,13 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
   )
   const [verifyResult, setVerifyResult] = useState<'match' | 'mismatch' | null>(null)
 
+  const { address: connectedAddress } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const { claimRefund, isPending: claimPending, error: claimError, txHash: claimTx } = useClaimRefund()
+
   const { request, isLoading, refetch } = useRequest(lookupId)
 
   function handleInputChange(val: string) {
-    // Accept digits only
     if (val !== '' && !/^\d+$/.test(val)) {
       setInputError('Request ID must be a number')
       return
@@ -68,12 +73,34 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
 
   const { label: openLabel, nowSecs } = useCountdown(request?.windowOpen)
   const { label: closeLabel } = useCountdown(request?.windowClose)
+
   const windowPhase = useMemo(() => {
     if (!request) return null
     if (nowSecs < Number(request.windowOpen)) return 'before' as const
     if (nowSecs < Number(request.windowClose)) return 'open' as const
     return 'closed' as const
   }, [request, nowSecs])
+
+  /**
+   * Refund eligibility:
+   *   status === 0 (PENDING — seller never committed)
+   *   AND now > buyerRevealDeadline (= windowClose + revealDeadlineOffset)
+   *   AND connected wallet is the buyer
+   */
+  const isBuyer = !!connectedAddress && !!request &&
+    connectedAddress.toLowerCase() === request.buyer.toLowerCase()
+
+  const refundEligible = !!request &&
+    request.status === 0 &&
+    nowSecs > Number(request.buyerRevealDeadline) &&
+    request.buyerRevealDeadline > 0n
+
+  async function handleClaimRefund() {
+    if (!request || !walletClient) return
+    await claimRefund(request.requestId, walletClient)
+    // Refetch after a short delay so the status badge updates
+    setTimeout(() => { void refetch() }, 3000)
+  }
 
   /** Verify: recompute hash from revealed data and compare to stored commitHash */
   function handleVerify() {
@@ -192,6 +219,85 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
               </div>
             )}
 
+            {/* ── CLAIM REFUND SECTION ─────────────────────────────────────── */}
+            {refundEligible && (
+              <div
+                className="rounded-xl p-4 flex flex-col gap-3"
+                style={{
+                  background: 'rgba(240,112,128,0.06)',
+                  border: '1px solid rgba(240,112,128,0.25)',
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <RotateCcw size={18} className="mt-0.5 shrink-0" style={{ color: 'var(--danger)' }} />
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Refund available</p>
+                    <p className="text-xs" style={{ color: 'var(--subtle)' }}>
+                      The seller did not commit before the reveal deadline. You are entitled to a full refund of{' '}
+                      <span className="font-semibold" style={{ color: 'var(--ink-2)' }}>${formatUsdc(request.feePaid)} USDC</span>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Claim tx success */}
+                {claimTx && (
+                  <div
+                    className="rounded-xl px-4 py-3 flex items-center gap-2 text-xs font-semibold"
+                    style={{ background: 'rgba(141,216,159,0.08)', border: '1px solid rgba(141,216,159,0.25)', color: 'var(--success)' }}
+                  >
+                    <CheckCircle2 size={13} />
+                    Refund claimed!{' '}
+                    <a
+                      href={explorerTx(claimTx)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:opacity-70 flex items-center gap-1"
+                    >
+                      View tx <ExternalLink size={10} />
+                    </a>
+                  </div>
+                )}
+
+                {/* Claim error */}
+                {claimError && !claimTx && (
+                  <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--danger)' }}>
+                    <AlertCircle size={11} /> {claimError}
+                  </p>
+                )}
+
+                {/* Connect wallet prompt if not connected */}
+                {!connectedAddress && (
+                  <p className="text-xs" style={{ color: 'var(--subtle)' }}>
+                    Connect your wallet to claim this refund.
+                  </p>
+                )}
+
+                {/* Wrong wallet warning */}
+                {connectedAddress && !isBuyer && (
+                  <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--subtle)' }}>
+                    <AlertCircle size={11} />
+                    Connect the buyer wallet ({formatAddress(request.buyer)}) to claim.
+                  </p>
+                )}
+
+                {/* Claim button — only shown when connected as buyer and no tx yet */}
+                {isBuyer && !claimTx && (
+                  <button
+                    onClick={() => { void handleClaimRefund() }}
+                    disabled={claimPending || !walletClient}
+                    className="flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-40 min-h-[44px] px-5 w-fit"
+                    style={{ background: 'var(--danger)', color: '#fff' }}
+                  >
+                    {claimPending
+                      ? <><Loader2 size={15} className="animate-spin" /> Claiming…</>
+                      : <><RotateCcw size={15} /> Claim ${formatUsdc(request.feePaid)} USDC refund</>
+                    }
+                  </button>
+                )}
+              </div>
+            )}
+            {/* ── END CLAIM REFUND ─────────────────────────────────────────── */}
+
             {/* Fields grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               {[
@@ -212,6 +318,11 @@ export function RequestDetail({ onBack, initialRequestId }: { onBack: () => void
                 { label: 'WINDOW OPEN',  value: formatTimestamp(request.windowOpen),  mono: false },
                 { label: 'WINDOW CLOSE', value: formatTimestamp(request.windowClose), mono: false },
                 { label: 'FEE PAID',     value: `$${formatUsdc(request.feePaid)} USDC`, mono: false },
+                {
+                  label: 'REVEAL DEADLINE',
+                  value: formatTimestamp(request.buyerRevealDeadline),
+                  mono: false,
+                },
               ].map(f => (
                 <div key={f.label} className="rounded-xl p-3" style={{ background: 'var(--surface-muted)', border: '1px solid var(--border)' }}>
                   <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>{f.label}</p>

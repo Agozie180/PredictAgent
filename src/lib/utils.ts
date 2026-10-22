@@ -34,6 +34,7 @@ export function parseOnchainError(error: unknown): string {
   }
   if (msg.includes('paused')) return 'The marketplace is currently paused.'
   if (msg.includes('notseller')) return 'Only the registered seller can perform this action.'
+  if (msg.includes('notbuyer')) return 'Only the buyer of this request can claim the refund.'
   if (msg.includes('hashmismatch')) return 'Signal hash mismatch — reveal data does not match commitment.'
   if (msg.includes('reverted')) {
     const m = msg.match(/reason="([^"]+)"/)
