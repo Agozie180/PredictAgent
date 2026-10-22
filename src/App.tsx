@@ -11,6 +11,7 @@ import { BacktestPanel } from './components/BacktestPanel'
 import { LandingPage } from './components/LandingPage'
 import { ErrorToastProvider } from './components/ErrorToast'
 import { BarChart2, ShoppingCart, Search, Zap, FlaskConical, Home, Copy, Check } from 'lucide-react'
+import { ClaimAllBanner } from './components/ClaimAllBanner'
 
 type View = 'home' | 'feed' | 'buy' | 'detail' | 'backtest'
 
@@ -154,6 +155,8 @@ export default function App() {
 
               {/* ── Main content ─────────────────────────────────────────── */}
               <main className="flex-1 min-w-0">
+                {/* Claim-all banner — appears on any tab when wallet has claimable refunds */}
+                <ClaimAllBanner />
                 {view !== 'home' && <Disclaimer />}
 
                 {view === 'home' && (

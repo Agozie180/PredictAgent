@@ -130,6 +130,55 @@ export function useClaimRefund() {
   return { claimRefund, isPending, error, txHash }
 }
 
+/**
+ * Claim all eligible refunds for the connected wallet in sequence.
+ * Eligible = status PENDING (0) AND buyerRevealDeadline has passed AND buyer === connectedAddress.
+ */
+export function useClaimAllRefunds() {
+  const addr = PREDICT_AGENT_ADDRESS
+  const [isPending, setIsPending] = useState(false)
+  const [errors, setErrors] = useState<string[]>([])
+  const [txHashes, setTxHashes] = useState<`0x${string}`[]>([])
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+
+  async function claimAll(
+    requestIds: bigint[],
+    walletClient: import('viem').WalletClient,
+    nowSecs: number,
+  ) {
+    if (!addr || requestIds.length === 0) return
+    setIsPending(true)
+    setErrors([])
+    setTxHashes([])
+    setProgress({ done: 0, total: requestIds.length })
+    const hashes: `0x${string}`[] = []
+    const errs: string[] = []
+    for (let i = 0; i < requestIds.length; i++) {
+      try {
+        const hash = await walletClient.writeContract({
+          address: addr,
+          abi: PREDICT_AGENT_ABI,
+          functionName: 'claimRefund',
+          args: [requestIds[i]],
+          chain: { id: CHAIN_ID } as import('viem').Chain,
+          account: walletClient.account!,
+        })
+        hashes.push(hash)
+      } catch (e) {
+        const { parseOnchainError } = await import('../lib/utils')
+        errs.push(`Request #${requestIds[i]}: ${parseOnchainError(e)}`)
+      }
+      setProgress({ done: i + 1, total: requestIds.length })
+    }
+    setTxHashes(hashes)
+    setErrors(errs)
+    setIsPending(false)
+    void nowSecs // consumed to avoid lint unused warning
+  }
+
+  return { claimAll, isPending, errors, txHashes, progress }
+}
+
 export function useMultipleRequests(count: number) {
   const addr = PREDICT_AGENT_ADDRESS
   const ids = Array.from({ length: count }, (_, i) => BigInt(i + 1))
