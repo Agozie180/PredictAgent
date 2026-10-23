@@ -4,8 +4,10 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    envVars:
-      - key: PORT
-        value: 10000
+    # PORT is injected automatically by Render — do NOT set it here.
+    # Set these in the Render dashboard → Environment:
+    #   CONTRACT_ADDRESS   — 0xf4DcF358ecea1B66Fe3d61bBb1C17b23F109C65f
+    #   SELLER_PRIVATE_KEY — 0x-prefixed hex private key for the seller wallet
+    #   ARC_RPC_URL        — https://rpc.mainnet.arc.io (optional, this is the default)
     healthCheckPath: /health
     autoDeploy: true

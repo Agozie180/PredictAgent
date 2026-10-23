@@ -312,10 +312,6 @@ let store = loadStore()
 // already-committed requests. MUST be declared after loadStore().
 const commitAttempted = new Set<string>(Object.keys(store.requestIndex))
 
-// Start workers AFTER store and commitAttempted are initialised
-autoCommitWorker()
-setInterval(autoCommitWorker, 60_000)
-
 const liveSignals: Map<string, { output: SignalOutput; computedAt: number }> = new Map()
 
 for (const [token, s] of Object.entries(store.signals)) {
@@ -395,11 +391,6 @@ async function getOrRefreshSignal(token: string): Promise<SignalOutput> {
 async function refreshAll() {
   await Promise.allSettled(SUPPORTED_TOKENS.map(t => refreshSignal(t)))
 }
-
-refreshAll()
-refreshSpotPrices()
-setInterval(refreshAll, 10 * 60 * 1000)
-setInterval(refreshSpotPrices, 60 * 1000)
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
@@ -647,6 +638,15 @@ console.log(`[PredictAgent] Contract : ${CONTRACT_ADDRESS}`)
 console.log(`[PredictAgent] RPC      : ${ARC_RPC_URL_ENV}`)
 console.log(`[PredictAgent] Seller PK: ${SELLER_PRIVATE_KEY ? '****' + SELLER_PRIVATE_KEY.slice(-4) : '(not set)'}`)
 console.log(`[PredictAgent] Store    : ${STORE_PATH}`)
+
+// Start async workers AFTER the HTTP server is bound and ready to serve health checks.
+// Firing these before Bun.serve() can delay the first health check response on Render.
+refreshAll()
+refreshSpotPrices()
+setInterval(refreshAll, 10 * 60 * 1000)
+setInterval(refreshSpotPrices, 60 * 1000)
+autoCommitWorker()
+setInterval(autoCommitWorker, 60_000)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

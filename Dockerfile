@@ -2,13 +2,17 @@ FROM oven/bun:1.2-slim
 
 WORKDIR /app
 
-# Copy only what the signal service needs
+# Copy lockfile first so Docker layer cache invalidates only when deps change
+COPY bun.lock ./
 COPY package.json ./
-RUN bun install --production
 
+# Reproducible install — exact versions from lockfile, no devDependencies
+RUN bun install --frozen-lockfile --production
+
+# Copy server source
 COPY server/ ./server/
 
-# PORT is injected by the host (Render: 10000, HF: 7860, local: 3001)
+# PORT is injected by Render at runtime
 EXPOSE 10000
 
 CMD ["bun", "run", "server/index.ts"]
